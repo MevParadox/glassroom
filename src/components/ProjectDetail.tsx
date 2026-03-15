@@ -111,7 +111,6 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
     });
   };
 
-  // ✅ FIX issue 2 & 3: Replace semua pebble di boulder (untuk hammer & refine)
   const replacePebbles = (boulderId: string, pebbles: Pebble[]) => {
     onUpdate({
       ...project,
@@ -121,7 +120,6 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
     });
   };
 
-  // ✅ FIX issue 4: Tambah pebble ke boulder tanpa hapus yang lama
   const addPebbles = (boulderId: string, newPebbles: Pebble[]) => {
     onUpdate({
       ...project,
@@ -152,45 +150,52 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Back + Archive */}
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-body transition-colors">
           <ArrowLeft size={16} /> Back
         </button>
         {!readOnly && allDone && (
-          <button onClick={onArchive} className="flex items-center gap-2 px-4 py-2 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
-            <Archive size={14} /> Archive Project
+          <button onClick={onArchive} className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
+            <Archive size={13} /> Archive
           </button>
         )}
       </div>
 
+      {/* Spark title + Auto Hammer */}
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           {editingSpark && !readOnly ? (
             <form onSubmit={(e) => { e.preventDefault(); const t = sparkText.trim(); if (t) { onUpdate({ ...project, spark: t }); } setEditingSpark(false); }} className="flex items-center gap-2 flex-1">
-              <input type="text" value={sparkText} onChange={(e) => setSparkText(e.target.value)} autoFocus className="flex-1 px-2 py-1 text-3xl bg-background border border-border rounded font-display focus:outline-none focus:ring-1 focus:ring-ring/30" />
+              <input type="text" value={sparkText} onChange={(e) => setSparkText(e.target.value)} autoFocus className="flex-1 px-2 py-1 text-xl bg-background border border-border rounded font-display focus:outline-none focus:ring-1 focus:ring-ring/30" />
               <button type="submit" className="text-primary hover:text-primary/80 transition-colors"><Check size={16} /></button>
               <button type="button" onClick={() => { setSparkText(project.spark); setEditingSpark(false); }} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
             </form>
           ) : (
-            <div className="flex items-center gap-2 group/spark">
-              <h2 className="font-display text-3xl text-foreground">{project.spark}</h2>
+            <div className="flex items-start gap-2 group/spark flex-1 min-w-0">
+              {/* ✅ font lebih kecil di mobile */}
+              <h2 className="font-display text-xl sm:text-3xl text-foreground leading-snug">{project.spark}</h2>
               {!readOnly && (
-                <button onClick={() => { setSparkText(project.spark); setEditingSpark(true); }} className="text-muted-foreground hover:text-foreground opacity-0 group-hover/spark:opacity-100 transition-opacity">
-                  <Pencil size={14} />
+                <button onClick={() => { setSparkText(project.spark); setEditingSpark(true); }} className="text-muted-foreground hover:text-foreground opacity-0 group-hover/spark:opacity-100 transition-opacity shrink-0 mt-1">
+                  <Pencil size={13} />
                 </button>
               )}
             </div>
           )}
 
-          {/* ✅ FIX issue 1: Hapus kondisi boulders.length === 0, AutoHammer selalu tampil */}
+          {/* ✅ Auto Hammer — shrink-0 biar ga wrap */}
           {!readOnly && !editingSpark && (
-            <AutoHammer spark={project.spark} onGenerated={(boulders) => onUpdate({ ...project, boulders })} />
+            <div className="shrink-0">
+              <AutoHammer spark={project.spark} onGenerated={(boulders) => onUpdate({ ...project, boulders })} />
+            </div>
           )}
         </div>
+
+        {/* Progress bar */}
         {totalPebbles > 0 && (
           <div className="mt-3">
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
               <motion.div className="h-full bg-primary rounded-full" initial={{ width: 0 }} animate={{ width: `${(donePebbles / totalPebbles) * 100}%` }} transition={{ duration: 0.5 }} />
             </div>
             <p className="text-xs text-muted-foreground font-body mt-1">{donePebbles}/{totalPebbles} pebbles done</p>
@@ -198,6 +203,7 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
         )}
       </div>
 
+      {/* Boulders */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleBoulderDragEnd}>
         <SortableContext items={project.boulders.map(b => b.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-4">
@@ -205,7 +211,7 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
               <SortableBoulder
                 key={boulder.id}
                 boulder={boulder}
-                spark={project.spark}  // ✅ pass spark untuk konteks AI
+                spark={project.spark}
                 readOnly={readOnly}
                 newPebbleText={newPebbleTexts[boulder.id] || ''}
                 onNewPebbleTextChange={(text) => setNewPebbleTexts(prev => ({ ...prev, [boulder.id]: text }))}
@@ -217,8 +223,8 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
                 onEditPebble={(pebbleId, newText) => editPebble(boulder.id, pebbleId, newText)}
                 onUpdatePebble={(pebbleId, updates) => updatePebble(boulder.id, pebbleId, updates)}
                 onReorderPebbles={handleReorderPebbles}
-                onReplacePebbles={replacePebbles}  // ✅ untuk hammer & refine
-                onAddPebbles={addPebbles}           // ✅ untuk tambah pebble
+                onReplacePebbles={replacePebbles}
+                onAddPebbles={addPebbles}
                 hidden={focusedPebbleId !== null && focusedBoulderId !== boulder.id}
                 onFocusPebble={setFocusedPebbleId}
                 focusedPebbleId={focusedPebbleId}
@@ -228,10 +234,11 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
         </SortableContext>
       </DndContext>
 
+      {/* Add boulder */}
       {!readOnly && (
         <form onSubmit={(e) => { e.preventDefault(); addBoulder(); }} className="flex gap-2">
-          <input type="text" value={newBoulderTitle} onChange={(e) => setNewBoulderTitle(e.target.value)} placeholder="Add a boulder (phase)…" className="flex-1 px-4 py-2.5 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
-          <button type="submit" className="px-4 py-2.5 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">Add Boulder</button>
+          <input type="text" value={newBoulderTitle} onChange={(e) => setNewBoulderTitle(e.target.value)} placeholder="Add a boulder (phase)…" className="flex-1 px-3 py-2 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
+          <button type="submit" className="px-3 py-2 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap">Add</button>
         </form>
       )}
     </div>

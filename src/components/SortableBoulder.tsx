@@ -83,30 +83,18 @@ const SortableBoulder = ({
     setIsHammering(true);
     try {
       const raw = await callGemini(`You are a project planning assistant.
-
 Project idea: "${spark}"
 Phase/Boulder: "${boulder.title}"
-
-Generate specific, actionable tasks for this phase of the project.
-
+Generate specific, actionable tasks for this phase.
 Return ONLY a valid JSON array of task strings, no explanation, no markdown, no backticks:
-["Task 1", "Task 2", "Task 3", "Task 4"]
-
-Rules:
-- 3 to 5 tasks
-- Each task must be specific to both the project idea AND this phase
-- Use the same language as the project idea
-- No generic tasks`);
-
+["Task 1", "Task 2", "Task 3"]
+Rules: 3-5 tasks, specific to project and phase, use same language as project idea.`);
       const tasks = parseJsonArray(raw);
-      const pebbles: Pebble[] = tasks.map((text: string) => ({
-        id: generateId(), text, status: 'todo' as Pebble['status'],
-      }));
+      const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
-      toast.success(`Pebbles generated for "${boulder.title}"!`);
+      toast.success('Pebbles generated!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan';
-      toast.error(`Hammer gagal: ${message}`);
+      toast.error(`Hammer gagal: ${err instanceof Error ? err.message : 'Error'}`);
     } finally {
       setIsHammering(false);
     }
@@ -117,36 +105,19 @@ Rules:
     setIsRefining(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callGemini(`You are a project planning assistant.
-
-Project idea: "${spark}"
-Phase/Boulder: "${boulder.title}"
-Current tasks:
-${existingTasks}
-
+      const raw = await callGemini(`Project: "${spark}", Phase: "${boulder.title}"
+Current tasks:\n${existingTasks}
 User feedback: "${refinePrompt}"
-
-Revise the task list based on the feedback above.
-
-Return ONLY a valid JSON array of task strings, no explanation, no markdown, no backticks:
-["Task 1", "Task 2", "Task 3"]
-
-Rules:
-- Apply the user's feedback to improve the tasks
-- Keep tasks specific to the project and phase
-- Use the same language as the project idea`);
-
+Revise tasks based on feedback. Return ONLY JSON array: ["Task 1", "Task 2"]
+Use same language as project idea.`);
       const tasks = parseJsonArray(raw);
-      const pebbles: Pebble[] = tasks.map((text: string) => ({
-        id: generateId(), text, status: 'todo' as Pebble['status'],
-      }));
+      const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
       setRefinePrompt('');
       setShowRefineInput(false);
       toast.success('Pebbles refined!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan';
-      toast.error(`Refinement gagal: ${message}`);
+      toast.error(`Refinement gagal: ${err instanceof Error ? err.message : 'Error'}`);
     } finally {
       setIsRefining(false);
     }
@@ -156,33 +127,16 @@ Rules:
     setIsAdding(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callGemini(`You are a project planning assistant.
-
-Project idea: "${spark}"
-Phase/Boulder: "${boulder.title}"
-Existing tasks (DO NOT repeat these):
-${existingTasks}
-
-Generate additional tasks for this phase that complement the existing ones.
-
-Return ONLY a valid JSON array of task strings, no explanation, no markdown, no backticks:
-["New Task 1", "New Task 2"]
-
-Rules:
-- 2 to 3 new tasks only
-- Must be different from existing tasks
-- Must be specific to the project and phase
-- Use the same language as the project idea`);
-
+      const raw = await callGemini(`Project: "${spark}", Phase: "${boulder.title}"
+Existing tasks (DO NOT repeat): ${existingTasks}
+Add 2-3 new complementary tasks. Return ONLY JSON array: ["New Task 1", "New Task 2"]
+Use same language as project idea.`);
       const tasks = parseJsonArray(raw);
-      const pebbles: Pebble[] = tasks.map((text: string) => ({
-        id: generateId(), text, status: 'todo' as Pebble['status'],
-      }));
+      const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onAddPebbles(boulder.id, pebbles);
       toast.success(`${pebbles.length} pebbles added!`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan';
-      toast.error(`Gagal tambah pebbles: ${message}`);
+      toast.error(`Gagal: ${err instanceof Error ? err.message : 'Error'}`);
     } finally {
       setIsAdding(false);
     }
@@ -200,61 +154,64 @@ Rules:
   if (hidden) return null;
 
   return (
-    <div ref={setNodeRef} style={style} className="bg-card border border-border rounded-lg p-5">
-      {/* Boulder header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+    <div ref={setNodeRef} style={style} className="bg-card border border-border rounded-lg p-4">
+
+      {/* ✅ Boulder header: judul full width, actions di bawah */}
+      <div className="mb-3">
+        {/* Row 1: grip + judul full width */}
+        <div className="flex items-start gap-2 w-full">
           {!readOnly && (
-            <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none">
-              <GripVertical size={16} />
+            <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none mt-1 shrink-0">
+              <GripVertical size={15} />
             </button>
           )}
           {editingTitle ? (
-            <form onSubmit={(e) => { e.preventDefault(); const t = titleText.trim(); if (t && t !== boulder.title) onEditBoulder(t); setEditingTitle(false); }} className="flex items-center gap-1">
-              <input type="text" value={titleText} onChange={(e) => setTitleText(e.target.value)} autoFocus className="px-2 py-0.5 text-xl bg-background border border-border rounded font-display focus:outline-none focus:ring-1 focus:ring-ring/30" />
-              <button type="submit" className="text-primary hover:text-primary/80"><Check size={14} /></button>
-              <button type="button" onClick={() => { setTitleText(boulder.title); setEditingTitle(false); }} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+            <form onSubmit={(e) => { e.preventDefault(); const t = titleText.trim(); if (t && t !== boulder.title) onEditBoulder(t); setEditingTitle(false); }} className="flex items-center gap-1 flex-1">
+              <input type="text" value={titleText} onChange={(e) => setTitleText(e.target.value)} autoFocus className="flex-1 min-w-0 px-2 py-0.5 text-base bg-background border border-border rounded font-display focus:outline-none focus:ring-1 focus:ring-ring/30" />
+              <button type="submit" className="text-primary shrink-0"><Check size={14} /></button>
+              <button type="button" onClick={() => { setTitleText(boulder.title); setEditingTitle(false); }} className="text-muted-foreground shrink-0"><X size={14} /></button>
             </form>
           ) : (
-            <div className="flex items-center gap-1 group/title">
-              <h3 className="font-display text-xl text-foreground">{boulder.title}</h3>
+            <div className="flex items-start gap-1 group/title flex-1">
+              <h3 className="font-display text-base sm:text-xl text-foreground leading-snug flex-1">{boulder.title}</h3>
               {!readOnly && (
-                <button onClick={() => { setTitleText(boulder.title); setEditingTitle(true); }} className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity">
-                  <Pencil size={12} />
+                <button onClick={() => { setTitleText(boulder.title); setEditingTitle(true); }} className="text-muted-foreground hover:text-foreground opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0 mt-0.5">
+                  <Pencil size={11} />
                 </button>
               )}
             </div>
           )}
         </div>
 
+        {/* ✅ Row 2: action buttons di bawah judul */}
         {!readOnly && (
-          <div className="flex items-center gap-1.5">
-            <button onClick={hammerBoulder} disabled={isHammering} title="Generate pebbles with AI"
-              className="flex items-center gap-1 px-2 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors disabled:opacity-50">
-              <Hammer size={12} className={isHammering ? 'animate-bounce' : ''} />
+          <div className="flex items-center gap-1 mt-2 ml-5">
+            <button onClick={hammerBoulder} disabled={isHammering}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors disabled:opacity-50">
+              <Hammer size={11} className={isHammering ? 'animate-bounce' : ''} />
               {isHammering ? 'Hammering…' : 'Hammer'}
             </button>
 
             {boulder.pebbles.length > 0 && (
-              <button onClick={() => setShowRefineInput(!showRefineInput)} title="Refine pebbles with feedback"
-                className="flex items-center gap-1 px-2 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors">
-                <RefreshCw size={12} />
+              <button onClick={() => setShowRefineInput(!showRefineInput)}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors">
+                <RefreshCw size={11} />
                 Refine
               </button>
             )}
 
             {boulder.pebbles.length > 0 && (
-              <button onClick={addMorePebbles} disabled={isAdding} title="Add more pebbles with AI"
-                className="flex items-center gap-1 px-2 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors disabled:opacity-50">
-                <Sparkles size={12} className={isAdding ? 'animate-pulse' : ''} />
+              <button onClick={addMorePebbles} disabled={isAdding}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors disabled:opacity-50">
+                <Sparkles size={11} className={isAdding ? 'animate-pulse' : ''} />
                 {isAdding ? 'Adding…' : 'More'}
               </button>
             )}
 
             <ConfirmDialog
               trigger={
-                <button className="text-muted-foreground hover:text-destructive transition-colors p-1">
-                  <Trash2 size={14} />
+                <button className="text-muted-foreground hover:text-destructive transition-colors p-1 ml-auto">
+                  <Trash2 size={12} />
                 </button>
               }
               title="Delete boulder?"
@@ -270,15 +227,14 @@ Rules:
       {showRefineInput && (
         <div className="mb-3 flex gap-2">
           <input type="text" value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)}
-            placeholder="Describe what to change, e.g. 'more technical', 'focus on design'…"
-            className="flex-1 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
+            placeholder="e.g. 'more technical', 'focus on design'…"
+            className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
             onKeyDown={(e) => e.key === 'Enter' && refinePebbles()} autoFocus />
           <button onClick={refinePebbles} disabled={isRefining || !refinePrompt.trim()}
-            className="px-3 py-1.5 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity disabled:opacity-50">
-            {isRefining ? 'Refining…' : 'Apply'}
+            className="px-3 py-1.5 text-xs font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50 whitespace-nowrap shrink-0">
+            {isRefining ? '…' : 'Apply'}
           </button>
-          <button onClick={() => { setShowRefineInput(false); setRefinePrompt(''); }}
-            className="px-2 py-1.5 text-sm font-body text-muted-foreground hover:text-foreground">
+          <button onClick={() => { setShowRefineInput(false); setRefinePrompt(''); }} className="shrink-0 text-muted-foreground hover:text-foreground">
             <X size={14} />
           </button>
         </div>
@@ -292,8 +248,8 @@ Rules:
               <SortablePebble
                 key={pebble.id}
                 pebble={pebble}
-                spark={spark}                  // ✅ pass spark
-                boulderTitle={boulder.title}   // ✅ pass boulder title
+                spark={spark}
+                boulderTitle={boulder.title}
                 readOnly={readOnly}
                 onToggle={() => onTogglePebble(pebble.id)}
                 onDelete={() => onDeletePebble(pebble.id)}
@@ -312,8 +268,8 @@ Rules:
         <form onSubmit={(e) => { e.preventDefault(); onAddPebble(); }} className="mt-3 flex gap-2">
           <input type="text" value={newPebbleText} onChange={(e) => onNewPebbleTextChange(e.target.value)}
             placeholder="Add a pebble…"
-            className="flex-1 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
-          <button type="submit" className="px-3 py-1.5 text-sm font-body bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity">
+            className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
+          <button type="submit" className="px-3 py-1.5 text-sm font-body bg-secondary text-secondary-foreground rounded-md hover:opacity-80 shrink-0">
             <Plus size={14} />
           </button>
         </form>

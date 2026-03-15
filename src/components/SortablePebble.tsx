@@ -22,8 +22,8 @@ const statusLabels: Record<Pebble['status'], string> = {
 
 interface SortablePebbleProps {
   pebble: Pebble;
-  spark: string;         // ← konteks project
-  boulderTitle: string;  // ← konteks phase
+  spark: string;
+  boulderTitle: string;
   readOnly?: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -48,11 +48,9 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
     setEditing(false);
   };
 
-  // ✅ Fitur Answer: AI elaborasi task ini dan hasilnya masuk ke content pebble
   const handleAnswer = async () => {
     setIsAnswering(true);
-    setExpanded(true); // buka editor sekalian
-
+    setExpanded(true);
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error('API key tidak ditemukan');
@@ -67,26 +65,26 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
               parts: [{
                 text: `You are a knowledgeable assistant. A user is working on a project and needs a DIRECT ANSWER to a specific question or task.
 
-                Project context: "${spark}"
-                Current phase: "${boulderTitle}"
-                Task/Question: "${pebble.text}"
+                    Project context: "${spark}"
+                    Current phase: "${boulderTitle}"
+                    Task/Question: "${pebble.text}"
 
-                IMPORTANT: Do NOT give instructions, steps, or sub-tasks. 
-                Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
+                    IMPORTANT: Do NOT give instructions, steps, or sub-tasks.
+                    Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
 
-                Example:
-                - Task: "Tentukan poin masalah MBG spesifik" 
-                - WRONG answer: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
-                - RIGHT answer: "Masalah utama MBG yang relevan antara lain: 1. Distribusi yang tidak merata ke daerah terpencil, 2. Kualitas gizi yang belum memenuhi standar, 3. Anggaran yang tidak transparan..."
-                
-                The length of your answer should match the complexity of the task.
-                - Simple tasks (define something, list items): concise, 3-5 points
-                - Complex tasks (write a script, create a plan): as long as needed to be complete
-                - Never cut off mid-sentence. Always finish completely.
-                
-                Use the same language as the task.
-                Format response in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
-                Be direct, specific, and informative. No code fences, raw HTML only.`,
+                    Example:
+                    - Task: "Tentukan poin masalah MBG spesifik"
+                    - WRONG: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
+                    - RIGHT: "Masalah utama MBG antara lain: 1. Distribusi tidak merata, 2. Kualitas gizi belum optimal..."
+
+                    Use the same language as the task.
+                    Format in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
+                    Be direct, specific, and informative.
+                    The length of your answer should match the complexity of the task.
+                    - Simple tasks: concise, 3-5 points
+                    - Complex tasks (write a script, create a plan): as long as needed to be complete
+                    - Never cut off mid-sentence. Always finish completely.
+                    No code fences, raw HTML only.`,
               }],
             }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
@@ -101,16 +99,11 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
 
       const data = await response.json();
       const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      // Bersihkan kalau ada code fence
       const html = raw.replace(/```html|```/g, '').trim();
-
-      // Simpan ke content pebble (akan muncul di PebbleEditor)
       onUpdatePebble({ content: html });
       toast.success('AI answer ready!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan';
-      toast.error(`Answer gagal: ${message}`);
+      toast.error(`Answer gagal: ${err instanceof Error ? err.message : 'Error'}`);
     } finally {
       setIsAnswering(false);
     }
@@ -118,84 +111,80 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
 
   return (
     <div ref={setNodeRef} style={style} className={`bg-card border border-border rounded-lg shadow-sm transition-shadow ${expanded ? 'shadow-md ring-1 ring-primary/10' : 'hover:shadow-md'}`}>
-      {/* Collapsed header */}
-      <div className="flex items-center gap-3 px-4 py-3 group">
-        {!readOnly && (
-          <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none shrink-0">
-            <GripVertical size={14} />
+
+      {/* ✅ Pebble header: stacked layout */}
+      <div className="px-3 py-2.5">
+
+        {/* Row 1: grip + expand + judul full width */}
+        <div className="flex items-start gap-2">
+          {!readOnly && (
+            <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none shrink-0 mt-0.5">
+              <GripVertical size={13} />
+            </button>
+          )}
+          <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground shrink-0 transition-colors mt-0.5">
+            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </button>
-        )}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-        >
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
 
-        {editing ? (
-          <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="flex items-center gap-1.5 flex-1">
-            <input
-              type="text"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              autoFocus
-              className="flex-1 px-2 py-0.5 text-sm bg-background border border-border rounded font-body focus:outline-none focus:ring-1 focus:ring-ring/30"
-            />
-            <button type="submit" className="text-primary hover:text-primary/80"><Check size={12} /></button>
-            <button type="button" onClick={() => { setEditText(pebble.text); setEditing(false); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
-          </form>
-        ) : (
-          <span
-            onClick={() => setExpanded(!expanded)}
-            className={`font-body flex-1 cursor-pointer text-sm ${pebble.status === 'done' ? 'line-through text-muted-foreground' : 'text-foreground'}`}
-          >
-            {pebble.text}
-          </span>
-        )}
+          {editing ? (
+            <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="flex items-center gap-1.5 flex-1">
+              <input type="text" value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus
+                className="flex-1 min-w-0 px-2 py-0.5 text-sm bg-background border border-border rounded font-body focus:outline-none focus:ring-1 focus:ring-ring/30" />
+              <button type="submit" className="text-primary shrink-0"><Check size={12} /></button>
+              <button type="button" onClick={() => { setEditText(pebble.text); setEditing(false); }} className="text-muted-foreground shrink-0"><X size={12} /></button>
+            </form>
+          ) : (
+            // ✅ Judul pebble full width
+            <span onClick={() => setExpanded(!expanded)}
+              className={`font-body flex-1 cursor-pointer text-sm leading-snug ${pebble.status === 'done' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+              {pebble.text}
+            </span>
+          )}
+        </div>
 
-        <button
-          onClick={() => !readOnly && onToggle()}
-          disabled={readOnly}
-          className={`px-2.5 py-1 text-[11px] rounded-full font-body transition-colors shrink-0 ${statusColors[pebble.status]}`}
-        >
-          {statusLabels[pebble.status]}
-        </button>
-
-        {!readOnly && !editing && (
-          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-            {/* ✅ Tombol Answer */}
-            <button
-              onClick={handleAnswer}
-              disabled={isAnswering}
-              title="Ask AI to answer this task"
-              className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-            >
-              <Sparkles size={10} className={isAnswering ? 'animate-pulse' : ''} />
-              {isAnswering ? 'Answering…' : 'Answer'}
+        {/* ✅ Row 2: status + answer + edit + delete di bawah judul */}
+        {!editing && (
+          <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
+            {/* Status badge */}
+            <button onClick={() => !readOnly && onToggle()} disabled={readOnly}
+              className={`px-2 py-0.5 text-[11px] rounded-full font-body transition-colors ${statusColors[pebble.status]}`}>
+              {statusLabels[pebble.status]}
             </button>
 
-            <button
-              onClick={(e) => { e.stopPropagation(); setEditText(pebble.text); setEditing(true); }}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Pencil size={12} />
-            </button>
-            <ConfirmDialog
-              trigger={
-                <button className="text-muted-foreground hover:text-destructive">
-                  <Trash2 size={12} />
+            {/* Answer button */}
+            {!readOnly && (
+              <button onClick={handleAnswer} disabled={isAnswering}
+                className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50">
+                <Sparkles size={10} className={isAnswering ? 'animate-pulse' : ''} />
+                {isAnswering ? 'Answering…' : 'Answer'}
+              </button>
+            )}
+
+            {/* Edit + Delete */}
+            {!readOnly && (
+              <>
+                <button onClick={() => { setEditText(pebble.text); setEditing(true); }}
+                  className="text-muted-foreground hover:text-foreground p-0.5">
+                  <Pencil size={11} />
                 </button>
-              }
-              title="Delete pebble?"
-              description={`"${pebble.text}" will be permanently removed.`}
-              confirmLabel="Delete"
-              onConfirm={onDelete}
-            />
+                <ConfirmDialog
+                  trigger={
+                    <button className="text-muted-foreground hover:text-destructive p-0.5">
+                      <Trash2 size={11} />
+                    </button>
+                  }
+                  title="Delete pebble?"
+                  description={`"${pebble.text}" will be permanently removed.`}
+                  confirmLabel="Delete"
+                  onConfirm={onDelete}
+                />
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded editor */}
       <AnimatePresence>
         {expanded && (
           <motion.div

@@ -18,7 +18,7 @@ const tabs: { id: Tab; label: string; icon: typeof Inbox }[] = [
   { id: 'inbox', label: 'Inbox', icon: Inbox },
   { id: 'workshop', label: 'Workshop', icon: Wrench },
   { id: 'archive', label: 'Archive', icon: Trophy },
-  { id: 'cryo', label: 'Cryochamber', icon: Snowflake },
+  { id: 'cryo', label: 'Cryo', icon: Snowflake },
 ];
 
 const Index = () => {
@@ -119,45 +119,42 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
+      <div className="max-w-2xl mx-auto px-4 py-6 sm:py-12">
 
         {/* Header */}
-        <header className="mb-8 flex items-start justify-between">
+        <header className="mb-6 flex flex-row items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-4xl sm:text-5xl text-foreground tracking-tight">
+            <h1 className="font-display text-3xl sm:text-5xl text-foreground tracking-tight">
               The Glass Room
             </h1>
-            <p className="font-body text-muted-foreground mt-1 text-sm">
+            <p className="font-body text-muted-foreground mt-1 text-xs sm:text-sm">
               Capture. Organize. Finish.
             </p>
           </div>
 
           {/* Pro status + Upgrade button */}
-          <div className="flex flex-col items-end gap-1.5 mt-1">
-            {/* Badge trial atau pro aktif */}
+          <div className="flex flex-col items-end gap-1.5 shrink-0 mt-1">
             {isTrialing ? (
-              <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                Pro Trial · {trialDaysLeft}h lagi
+              <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 whitespace-nowrap">
+                Pro Trial · {trialDaysLeft}h
               </span>
             ) : isPro ? (
               <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                ✓ Pro Aktif
+                ✓ Pro
               </span>
             ) : null}
-
-            {/* Tombol upgrade — selalu tampil */}
             <button
               onClick={() => setShowUpgrade(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-body bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-body bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors whitespace-nowrap"
             >
-              <Zap size={11} />
-              {isPro && !isTrialing ? 'Kelola Langganan' : 'Upgrade Pro'}
+              <Zap size={10} />
+              {isPro && !isTrialing ? 'Kelola' : 'Upgrade Pro'}
             </button>
           </div>
         </header>
 
         {/* Quick Capture */}
-        <div className="mb-8">
+        <div className="mb-6">
           <QuickCapture onCapture={handleCapture} />
         </div>
 
@@ -170,7 +167,7 @@ const Index = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search projects, boulders, pebbles…"
+                placeholder="Search…"
                 autoFocus
                 className="w-full pl-9 pr-9 py-2 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
               />
@@ -185,8 +182,8 @@ const Index = () => {
           )}
         </div>
 
-        {/* Tabs */}
-        <nav className="flex gap-1 mb-8 border-b border-border">
+        {/* Tabs — scrollable di mobile */}
+        <nav className="flex gap-1 mb-6 border-b border-border overflow-x-auto scrollbar-none">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -199,11 +196,11 @@ const Index = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-body transition-colors ${
+                className={`relative flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-body transition-colors whitespace-nowrap shrink-0 ${
                   isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={13} />
                 {tab.label}
                 {count > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded-full">
@@ -251,7 +248,7 @@ const Index = () => {
               {cryochamber.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                   <Snowflake size={32} className="mx-auto mb-3 opacity-40" />
-                  <p className="text-lg font-body">Cryochamber is empty. Use Bankruptcy to freeze your inbox.</p>
+                  <p className="text-lg font-body">Cryochamber is empty.</p>
                 </div>
               ) : (
                 <>
@@ -260,7 +257,7 @@ const Index = () => {
                   </p>
                   {cryochamber.map(idea => (
                     <div key={idea.id} className="flex items-center justify-between p-4 bg-card border border-border rounded-lg opacity-60 hover:opacity-100 transition-opacity">
-                      <p className="font-body text-foreground flex-1">{idea.text}</p>
+                      <p className="font-body text-foreground flex-1 text-sm">{idea.text}</p>
                       <div className="flex items-center gap-2 ml-3 shrink-0">
                         <button
                           onClick={() => {
@@ -300,7 +297,6 @@ const Index = () => {
         </main>
       </div>
 
-      {/* Upgrade Modal */}
       {showUpgrade && (
         <UpgradeModal
           onClose={() => setShowUpgrade(false)}

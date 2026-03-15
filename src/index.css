@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --background: 40 33% 96%;
+    --foreground: 0 0% 10%;
+
+    --card: 40 33% 98%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 40 33% 98%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 32 80% 50%;
+    --primary-foreground: 40 33% 98%;
+
+    --secondary: 35 20% 90%;
+    --secondary-foreground: 0 0% 15%;
+
+    --muted: 35 15% 92%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 32 80% 50%;
+    --accent-foreground: 40 33% 98%;
+
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 40 33% 98%;
+
+    --border: 35 15% 85%;
+    --input: 35 15% 85%;
+    --ring: 32 80% 50%;
+
+    --radius: 0.5rem;
+
+    --font-display: 'Instrument Serif', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}
+
+/* Tiptap editor styles */
+.tiptap {
+  outline: none;
+}
+.tiptap p {
+  margin: 0.25em 0;
+}
+.tiptap h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+  font-family: var(--font-display);
+}
+.tiptap ul, .tiptap ol {
+  padding-left: 1.25em;
+  margin: 0.25em 0;
+}
+.tiptap li {
+  margin: 0.1em 0;
+}
+.tiptap ul {
+  list-style-type: disc;
+}
+.tiptap ol {
+  list-style-type: decimal;
+}
+.tiptap strong {
+  font-weight: 600;
+}
+.tiptap em {
+  font-style: italic;
+}
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}

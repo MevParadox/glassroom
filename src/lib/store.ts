@@ -47,18 +47,33 @@ export async function saveIdeas(ideas: Idea[]): Promise<void> {
 }
 
 // ─── CRYOCHAMBER (sama struktur sama ideas) ───────────────
-
-const CRYO_KEY = 'glassroom-cryo'; // tetap localStorage untuk sekarang
-
-export function getCryochamber(): Idea[] {
-  try {
-    const raw = localStorage.getItem(CRYO_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+export async function getCryochamber(): Promise<Idea[]> {
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from('cryochamber')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    text: row.text,
+    createdAt: row.created_at,
+  }));
 }
 
-export function saveCryochamber(ideas: Idea[]): void {
-  localStorage.setItem(CRYO_KEY, JSON.stringify(ideas));
+export async function saveCryochamber(ideas: Idea[]): Promise<void> {
+  const userId = await getUserId();
+  await supabase.from('cryochamber').delete().eq('user_id', userId);
+  if (ideas.length > 0) {
+    await supabase.from('cryochamber').insert(
+      ideas.map(idea => ({
+        id: idea.id,
+        user_id: userId,
+        text: idea.text,
+      }))
+    );
+  }
 }
 
 // ─── PROJECTS (dengan nested boulders + pebbles) ──────────

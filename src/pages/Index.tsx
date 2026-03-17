@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Idea, Project, Boulder } from '@/lib/types';
+import { Idea, Project } from '@/lib/types';
 import { getIdeas, saveIdeas, getProjects, saveProjects, getCryochamber, saveCryochamber, generateId } from '@/lib/store';
 import QuickCapture from '@/components/QuickCapture';
 import InboxView from '@/components/InboxView';
@@ -8,9 +8,10 @@ import ArchiveView from '@/components/ArchiveView';
 import UpgradeModal from '@/components/UpgradeModal';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap } from 'lucide-react';
+import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap, LogOut } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useProStatus } from '@/hooks/useProStatus';
+import { supabase } from '@/lib/supabase';
 
 type Tab = 'inbox' | 'workshop' | 'archive' | 'cryo';
 
@@ -29,24 +30,55 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const { isPro, isTrialing, trialDaysLeft, activatePro } = useProStatus();
 
+  // ✅ Load data dari Supabase saat mount
   useEffect(() => {
-    setIdeas(getIdeas());
-    setProjects(getProjects());
-    setCryochamber(getCryochamber());
+    const loadData = async () => {
+      try {
+        const [ideasData, projectsData] = await Promise.all([
+          getIdeas(),
+          getProjects(),
+        ]);
+        setIdeas(ideasData);
+        setProjects(projectsData);
+        setCryochamber(getCryochamber()); // cryo masih localStorage
+      } catch (err) {
+        console.error('Failed to load data:', err);
+        toast.error('Gagal load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
-  const updateIdeas = useCallback((next: Idea[]) => {
+  // ✅ updateIdeas — async ke Supabase
+  const updateIdeas = useCallback(async (next: Idea[]) => {
     setIdeas(next);
-    saveIdeas(next);
+    try {
+      await saveIdeas(next);
+    } catch (err) {
+      console.error('Failed to save ideas:', err);
+    }
   }, []);
 
-  const updateProjects = useCallback((next: Project[]) => {
+  // ✅ updateProjects — async ke Supabase
+  const updateProjects = useCallback(async (next: Project[]) => {
     setProjects(next);
-    saveProjects(next);
+    try {
+      await saveProjects(next);
+    } catch (err) {
+      console.error('Failed to save projects:', err);
+    }
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast('Logged out');
+  };
 
   const handleCapture = (text: string) => {
     const idea: Idea = { id: generateId(), text, createdAt: new Date().toISOString() };
@@ -117,6 +149,18 @@ const Index = () => {
     toast('Project frozen → Cryochamber', { icon: '❄️' });
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-body text-muted-foreground">Loading your workspace…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 sm:py-12">
@@ -132,7 +176,7 @@ const Index = () => {
             </p>
           </div>
 
-          {/* Pro status + Upgrade button */}
+          {/* Pro status + buttons */}
           <div className="flex flex-col items-end gap-1.5 shrink-0 mt-1">
             {isTrialing ? (
               <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 whitespace-nowrap">
@@ -143,13 +187,23 @@ const Index = () => {
                 ✓ Pro
               </span>
             ) : null}
-            <button
-              onClick={() => setShowUpgrade(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-body bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors whitespace-nowrap"
-            >
-              <Zap size={10} />
-              {isPro && !isTrialing ? 'Kelola' : 'Upgrade Pro'}
-            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowUpgrade(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-body bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors whitespace-nowrap"
+              >
+                <Zap size={10} />
+                {isPro && !isTrialing ? 'Kelola' : 'Upgrade Pro'}
+              </button>
+              <button
+                onClick={handleLogout}
+                title="Logout"
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg transition-colors"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -182,7 +236,7 @@ const Index = () => {
           )}
         </div>
 
-        {/* Tabs — scrollable di mobile */}
+        {/* Tabs */}
         <nav className="flex gap-1 mb-6 border-b border-border overflow-x-auto scrollbar-none">
           {tabs.map(tab => {
             const Icon = tab.icon;

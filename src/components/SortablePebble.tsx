@@ -24,6 +24,7 @@ interface SortablePebbleProps {
   pebble: Pebble;
   spark: string;
   boulderTitle: string;
+  boulderPebbles: Pebble[]; // ✅ semua pebble di boulder ini
   readOnly?: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -33,7 +34,7 @@ interface SortablePebbleProps {
   isFocused?: boolean;
 }
 
-const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused }: SortablePebbleProps) => {
+const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly, onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused }: SortablePebbleProps) => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(pebble.text);
   const [expanded, setExpanded] = useState(false);
@@ -61,6 +62,16 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error('API key tidak ditemukan');
 
+      // ✅ Context chaining — ambil 150 char pertama dari pebble lain yang sudah punya content
+      const contextPebbles = boulderPebbles
+        .filter(p => p.id !== pebble.id && p.content)
+        .map(p => `- "${p.text}": ${p.content?.substring(0, 150)}...`)
+        .join('\n');
+
+      const contextSection = contextPebbles
+        ? `\nContext from other completed tasks in this phase (use this to stay consistent):\n${contextPebbles}\n`
+        : '';
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
@@ -74,22 +85,26 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
 Project context: "${spark}"
 Current phase: "${boulderTitle}"
 Task/Question: "${pebble.text}"
-
+${contextSection}
 IMPORTANT: Do NOT give instructions, steps, or sub-tasks.
 Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
+If context from other tasks is provided, make sure your answer is CONSISTENT with them.
+
+FORMAT RULES:
+1. Start with a 2-3 sentence SUMMARY of your answer (the hook — someone reading only this should get the core idea)
+2. Then provide the full detailed answer
 
 Example:
 - Task: "Tentukan poin masalah MBG spesifik"
 - WRONG: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
-- RIGHT: "Masalah utama MBG antara lain: 1. Distribusi tidak merata, 2. Kualitas gizi belum optimal..."
+- RIGHT: 
+  [Summary] "Program MBG menghadapi 3 masalah utama: kualitas gizi, distribusi tidak merata, dan kurangnya transparansi anggaran."
+  [Detail] "1. Kualitas Gizi... 2. Distribusi..."
 
 Use the same language as the task.
 Format in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
-Be direct, specific, and informative.
-The length of your answer should match the complexity of the task.
-- Simple tasks: concise, 3-5 points
-- Complex tasks (write a script, create a plan): as long as needed to be complete
-- Never cut off mid-sentence. Always finish completely.
+The summary must be wrapped in <p><strong>...</strong></p> so it stands out.
+Never cut off mid-sentence. Always finish completely.
 No code fences, raw HTML only.`,
               }],
             }],
@@ -152,13 +167,11 @@ No code fences, raw HTML only.`,
         {/* Row 2: actions */}
         {!editing && (
           <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
-            {/* Status */}
             <button onClick={() => !readOnly && onToggle()} disabled={readOnly}
               className={`px-2 py-0.5 text-[11px] rounded-full font-body transition-colors ${statusColors[pebble.status]}`}>
               {statusLabels[pebble.status]}
             </button>
 
-            {/* ✅ Anvil toggle */}
             {!readOnly && (
               <button onClick={handleToggleFocus}
                 title={pebble.focusToday ? 'Hapus dari The Anvil' : 'Tambah ke The Anvil'}
@@ -172,7 +185,6 @@ No code fences, raw HTML only.`,
               </button>
             )}
 
-            {/* Answer */}
             {!readOnly && (
               <button onClick={handleAnswer} disabled={isAnswering}
                 className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50">
@@ -181,7 +193,6 @@ No code fences, raw HTML only.`,
               </button>
             )}
 
-            {/* Edit + Delete */}
             {!readOnly && (
               <>
                 <button onClick={() => { setEditText(pebble.text); setEditing(true); }}
@@ -205,7 +216,6 @@ No code fences, raw HTML only.`,
         )}
       </div>
 
-      {/* Expanded editor */}
       <AnimatePresence>
         {expanded && (
           <motion.div

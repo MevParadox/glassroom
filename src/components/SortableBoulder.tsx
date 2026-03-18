@@ -156,9 +156,7 @@ Use same language as project idea.`);
   return (
     <div ref={setNodeRef} style={style} className="bg-card border border-border rounded-lg p-4">
 
-      {/* ✅ Boulder header: judul full width, actions di bawah */}
       <div className="mb-3">
-        {/* Row 1: grip + judul full width */}
         <div className="flex items-start gap-2 w-full">
           {!readOnly && (
             <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none mt-1 shrink-0">
@@ -183,7 +181,6 @@ Use same language as project idea.`);
           )}
         </div>
 
-        {/* ✅ Row 2: action buttons di bawah judul */}
         {!readOnly && (
           <div className="flex items-center gap-1 mt-2 ml-5">
             <button onClick={hammerBoulder} disabled={isHammering}
@@ -223,7 +220,6 @@ Use same language as project idea.`);
         )}
       </div>
 
-      {/* Refine input */}
       {showRefineInput && (
         <div className="mb-3 flex gap-2">
           <input type="text" value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)}
@@ -240,7 +236,6 @@ Use same language as project idea.`);
         </div>
       )}
 
-      {/* Pebble list */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePebbleDragEnd}>
         <SortableContext items={boulder.pebbles.map(p => p.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
@@ -250,6 +245,7 @@ Use same language as project idea.`);
                 pebble={pebble}
                 spark={spark}
                 boulderTitle={boulder.title}
+                boulderPebbles={boulder.pebbles} // ✅ pass semua pebble di boulder ini
                 readOnly={readOnly}
                 onToggle={() => onTogglePebble(pebble.id)}
                 onDelete={() => onDeletePebble(pebble.id)}
@@ -263,7 +259,6 @@ Use same language as project idea.`);
         </SortableContext>
       </DndContext>
 
-      {/* Add pebble manual */}
       {!readOnly && (
         <form onSubmit={(e) => { e.preventDefault(); onAddPebble(); }} className="mt-3 flex gap-2">
           <input type="text" value={newPebbleText} onChange={(e) => onNewPebbleTextChange(e.target.value)}

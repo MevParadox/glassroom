@@ -295,13 +295,11 @@ const Index = () => {
           </div>
         </header>
 
-        {/* Quick Capture */}
-        <div className="mb-6">
-          <QuickCapture onCapture={handleCapture} />
-        </div>
-
-        {/* Search */}
-        <div className="mb-4 flex justify-end">
+        {/* Quick Capture + Search */}
+        <div className="mb-6 flex items-center gap-2">
+          <div className="flex-1">
+            <QuickCapture onCapture={handleCapture} />
+          </div>
           {searchOpen ? (
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -314,7 +312,7 @@ const Index = () => {
               </button>
             </div>
           ) : (
-            <button onClick={() => setSearchOpen(true)} className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors">
+            <button onClick={() => setSearchOpen(true)} className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors shrink-0">
               <Search size={16} />
             </button>
           )}

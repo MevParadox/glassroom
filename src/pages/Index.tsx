@@ -1,26 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Idea, Project } from '@/lib/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Idea, Project, Pebble } from '@/lib/types';
 import { getIdeas, saveIdeas, getProjects, saveProjects, getCryochamber, saveCryochamber, generateId } from '@/lib/store';
 import QuickCapture from '@/components/QuickCapture';
 import InboxView from '@/components/InboxView';
 import WorkshopView from '@/components/WorkshopView';
 import ArchiveView from '@/components/ArchiveView';
+import AnvilView from '@/components/AnvilView';
 import UpgradeModal from '@/components/UpgradeModal';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
-import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap, LogOut, Hammer, ChevronDown } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useProStatus } from '@/hooks/useProStatus';
 import { supabase } from '@/lib/supabase';
 
-type Tab = 'inbox' | 'workshop' | 'archive' | 'cryo';
+type Tab = 'inbox' | 'workshop' | 'anvil' | 'archive' | 'cryo';
 
 const tabs: { id: Tab; label: string; icon: typeof Inbox }[] = [
   { id: 'inbox', label: 'Inbox', icon: Inbox },
   { id: 'workshop', label: 'Workshop', icon: Wrench },
+  { id: 'anvil', label: 'The Anvil', icon: Hammer },
   { id: 'archive', label: 'Archive', icon: Trophy },
   { id: 'cryo', label: 'Cryo', icon: Snowflake },
 ];
+
+const nextStatus: Record<Pebble['status'], Pebble['status']> = {
+  'todo': 'in-progress',
+  'in-progress': 'done',
+  'done': 'todo',
+};
 
 const Index = () => {
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -31,17 +39,22 @@ const Index = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { isPro, isTrialing, trialDaysLeft, activatePro } = useProStatus();
 
-  // ✅ Load semua data dari Supabase saat mount
   useEffect(() => {
     const loadData = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) setUserEmail(user.email);
+
         const [ideasData, projectsData, cryoData] = await Promise.all([
           getIdeas(),
           getProjects(),
-          getCryochamber(), // ✅ sekarang async
+          getCryochamber(),
         ]);
         setIdeas(ideasData);
         setProjects(projectsData);
@@ -56,6 +69,17 @@ const Index = () => {
     loadData();
   }, []);
 
+  // Tutup dropdown kalau klik di luar
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const updateIdeas = useCallback(async (next: Idea[]) => {
     setIdeas(next);
     try { await saveIdeas(next); } catch (err) { console.error(err); }
@@ -66,7 +90,6 @@ const Index = () => {
     try { await saveProjects(next); } catch (err) { console.error(err); }
   }, []);
 
-  // ✅ updateCryo — async ke Supabase
   const updateCryo = useCallback(async (next: Idea[]) => {
     setCryochamber(next);
     try { await saveCryochamber(next); } catch (err) { console.error(err); }
@@ -85,11 +108,7 @@ const Index = () => {
 
   const handleProcess = (idea: Idea) => {
     const project: Project = {
-      id: generateId(),
-      spark: idea.text,
-      boulders: [],
-      archived: false,
-      createdAt: new Date().toISOString(),
+      id: generateId(), spark: idea.text, boulders: [], archived: false, createdAt: new Date().toISOString(),
     };
     updateProjects([project, ...projects]);
     updateIdeas(ideas.filter(i => i.id !== idea.id));
@@ -120,11 +139,7 @@ const Index = () => {
 
   const handleCreateProject = (spark: string) => {
     const project: Project = {
-      id: generateId(),
-      spark,
-      boulders: [],
-      archived: false,
-      createdAt: new Date().toISOString(),
+      id: generateId(), spark, boulders: [], archived: false, createdAt: new Date().toISOString(),
     };
     updateProjects([project, ...projects]);
   };
@@ -142,6 +157,47 @@ const Index = () => {
     updateProjects(projects.filter(p => p.id !== id));
     toast('Project frozen → Cryochamber', { icon: '❄️' });
   };
+
+  const handleAnvilUpdatePebble = (projectId: string, boulderId: string, pebbleId: string, updates: Partial<Pebble>) => {
+    const next = projects.map(p =>
+      p.id === projectId ? {
+        ...p, boulders: p.boulders.map(b =>
+          b.id === boulderId ? {
+            ...b, pebbles: b.pebbles.map(pebble =>
+              pebble.id === pebbleId ? { ...pebble, ...updates } : pebble
+            )
+          } : b
+        )
+      } : p
+    );
+    updateProjects(next);
+  };
+
+  const handleAnvilTogglePebble = (projectId: string, boulderId: string, pebbleId: string) => {
+    const next = projects.map(p =>
+      p.id === projectId ? {
+        ...p, boulders: p.boulders.map(b =>
+          b.id === boulderId ? {
+            ...b, pebbles: b.pebbles.map(pebble =>
+              pebble.id === pebbleId ? { ...pebble, status: nextStatus[pebble.status] } : pebble
+            )
+          } : b
+        )
+      } : p
+    );
+    updateProjects(next);
+  };
+
+  const anvilCount = projects
+    .filter(p => !p.archived)
+    .reduce((sum, p) => sum + p.boulders.reduce((s, b) => s + b.pebbles.filter(pebble => pebble.focusToday).length, 0), 0);
+
+  // Initial avatar dari email
+  const avatarInitial = userEmail ? userEmail[0].toUpperCase() : '?';
+
+  // Warna urgency badge trial
+  const trialUrgent = trialDaysLeft <= 2;
+  const trialWarning = trialDaysLeft <= 4;
 
   if (loading) {
     return (
@@ -161,34 +217,80 @@ const Index = () => {
         {/* Header */}
         <header className="mb-6 flex flex-row items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-3xl sm:text-5xl text-foreground tracking-tight">
-              The Glass Room
-            </h1>
-            <p className="font-body text-muted-foreground mt-1 text-xs sm:text-sm">
-              Capture. Organize. Finish.
-            </p>
+            <h1 className="font-display text-3xl sm:text-5xl text-foreground tracking-tight">The Glass Room</h1>
+            <p className="font-body text-muted-foreground mt-1 text-xs sm:text-sm">Capture. Organize. Finish.</p>
           </div>
 
-          <div className="flex flex-col items-end gap-1.5 shrink-0 mt-1">
-            {isTrialing ? (
-              <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 whitespace-nowrap">
-                Pro Trial · {trialDaysLeft}h
-              </span>
-            ) : isPro ? (
-              <span className="text-[10px] font-body text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                ✓ Pro
-              </span>
-            ) : null}
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setShowUpgrade(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-body bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors whitespace-nowrap">
+          <div className="flex items-center gap-2 shrink-0 mt-1">
+            {/* ✅ Trial badge — selalu visible, urgency styling */}
+            {isTrialing && (
+              <motion.button
+                onClick={() => { setShowUpgrade(true); setShowDropdown(false); }}
+                animate={trialUrgent ? { scale: [1, 1.03, 1] } : {}}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded-lg border transition-colors whitespace-nowrap ${
+                  trialUrgent
+                    ? 'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20'
+                    : trialWarning
+                    ? 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
+                    : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20'
+                }`}>
                 <Zap size={10} />
-                {isPro && !isTrialing ? 'Kelola' : 'Upgrade Pro'}
+                Trial · {trialDaysLeft}h lagi
+              </motion.button>
+            )}
+
+            {/* ✅ Avatar dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center gap-1 group"
+              >
+                {/* Avatar circle */}
+                <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-display font-semibold">
+                  {avatarInitial}
+                </div>
+                <ChevronDown size={12} className={`text-muted-foreground transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
               </button>
-              <button onClick={handleLogout} title="Logout"
-                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg transition-colors">
-                <LogOut size={13} />
-              </button>
+
+              {/* Dropdown menu */}
+              <AnimatePresence>
+                {showDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-10 w-52 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden"
+                  >
+                    {/* User info */}
+                    <div className="px-4 py-3 border-b border-border">
+                      <p className="text-xs font-body text-muted-foreground truncate">{userEmail}</p>
+                      {isPro && !isTrialing && (
+                        <p className="text-xs font-body text-primary mt-0.5">✓ Pro Aktif</p>
+                      )}
+                    </div>
+
+                    {/* Upgrade Pro */}
+                    <button
+                      onClick={() => { setShowUpgrade(true); setShowDropdown(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left"
+                    >
+                      <Zap size={14} className="text-primary" />
+                      {isPro && !isTrialing ? 'Kelola Langganan' : 'Upgrade ke Pro'}
+                    </button>
+
+                    {/* Logout */}
+                    <button
+                      onClick={() => { handleLogout(); setShowDropdown(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors text-left border-t border-border"
+                    >
+                      <LogOut size={14} />
+                      Logout
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
@@ -198,7 +300,7 @@ const Index = () => {
           <QuickCapture onCapture={handleCapture} />
         </div>
 
-        {/* Search Toggle */}
+        {/* Search */}
         <div className="mb-4 flex justify-end">
           {searchOpen ? (
             <div className="relative flex-1">
@@ -225,6 +327,7 @@ const Index = () => {
             const isActive = activeTab === tab.id;
             const count = tab.id === 'inbox' ? ideas.length
               : tab.id === 'workshop' ? projects.filter(p => !p.archived).length
+              : tab.id === 'anvil' ? anvilCount
               : tab.id === 'archive' ? projects.filter(p => p.archived).length
               : cryochamber.length;
 
@@ -236,7 +339,9 @@ const Index = () => {
                 <Icon size={13} />
                 {tab.label}
                 {count > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded-full">{count}</span>
+                  <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                    tab.id === 'anvil' ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                  }`}>{count}</span>
                 )}
                 {isActive && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />}
               </button>
@@ -256,6 +361,9 @@ const Index = () => {
               onDeleteProject={handleDeleteProject} onFreezeProject={handleFreezeProject}
               searchQuery={searchQuery} />
           )}
+          {activeTab === 'anvil' && (
+            <AnvilView projects={projects} onUpdatePebble={handleAnvilUpdatePebble} onTogglePebble={handleAnvilTogglePebble} />
+          )}
           {activeTab === 'archive' && <ArchiveView projects={projects} searchQuery={searchQuery} />}
           {activeTab === 'cryo' && (
             <div className="space-y-2">
@@ -273,21 +381,12 @@ const Index = () => {
                     <div key={idea.id} className="flex items-center justify-between p-4 bg-card border border-border rounded-lg opacity-60 hover:opacity-100 transition-opacity">
                       <p className="font-body text-foreground flex-1 text-sm">{idea.text}</p>
                       <div className="flex items-center gap-2 ml-3 shrink-0">
-                        <button
-                          onClick={() => {
-                            updateIdeas([idea, ...ideas]);
-                            updateCryo(cryochamber.filter(i => i.id !== idea.id));
-                            toast('Idea restored to Inbox', { icon: '🔄' });
-                          }}
+                        <button onClick={() => { updateIdeas([idea, ...ideas]); updateCryo(cryochamber.filter(i => i.id !== idea.id)); toast('Idea restored to Inbox', { icon: '🔄' }); }}
                           className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors">
                           Restore
                         </button>
                         <ConfirmDialog
-                          trigger={
-                            <button className="text-muted-foreground hover:text-destructive transition-colors">
-                              <Trash2 size={14} />
-                            </button>
-                          }
+                          trigger={<button className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></button>}
                           title="Delete frozen idea?"
                           description={`"${idea.text}" will be permanently removed.`}
                           confirmLabel="Delete"

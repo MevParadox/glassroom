@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Pebble } from '@/lib/types';
-import { Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { Trash2, GripVertical, Pencil, Check, X, ChevronDown, ChevronRight, Sparkles, Hammer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmDialog from './ConfirmDialog';
 import PebbleEditor from './PebbleEditor';
@@ -48,6 +48,12 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
     setEditing(false);
   };
 
+  const handleToggleFocus = () => {
+    const next = !pebble.focusToday;
+    onUpdatePebble({ focusToday: next });
+    toast(next ? '🔨 Ditambah ke The Anvil!' : 'Dihapus dari The Anvil');
+  };
+
   const handleAnswer = async () => {
     setIsAnswering(true);
     setExpanded(true);
@@ -65,26 +71,26 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
               parts: [{
                 text: `You are a knowledgeable assistant. A user is working on a project and needs a DIRECT ANSWER to a specific question or task.
 
-                    Project context: "${spark}"
-                    Current phase: "${boulderTitle}"
-                    Task/Question: "${pebble.text}"
+Project context: "${spark}"
+Current phase: "${boulderTitle}"
+Task/Question: "${pebble.text}"
 
-                    IMPORTANT: Do NOT give instructions, steps, or sub-tasks.
-                    Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
+IMPORTANT: Do NOT give instructions, steps, or sub-tasks.
+Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
 
-                    Example:
-                    - Task: "Tentukan poin masalah MBG spesifik"
-                    - WRONG: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
-                    - RIGHT: "Masalah utama MBG antara lain: 1. Distribusi tidak merata, 2. Kualitas gizi belum optimal..."
+Example:
+- Task: "Tentukan poin masalah MBG spesifik"
+- WRONG: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
+- RIGHT: "Masalah utama MBG antara lain: 1. Distribusi tidak merata, 2. Kualitas gizi belum optimal..."
 
-                    Use the same language as the task.
-                    Format in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
-                    Be direct, specific, and informative.
-                    The length of your answer should match the complexity of the task.
-                    - Simple tasks: concise, 3-5 points
-                    - Complex tasks (write a script, create a plan): as long as needed to be complete
-                    - Never cut off mid-sentence. Always finish completely.
-                    No code fences, raw HTML only.`,
+Use the same language as the task.
+Format in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
+Be direct, specific, and informative.
+The length of your answer should match the complexity of the task.
+- Simple tasks: concise, 3-5 points
+- Complex tasks (write a script, create a plan): as long as needed to be complete
+- Never cut off mid-sentence. Always finish completely.
+No code fences, raw HTML only.`,
               }],
             }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
@@ -110,12 +116,14 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`bg-card border border-border rounded-lg shadow-sm transition-shadow ${expanded ? 'shadow-md ring-1 ring-primary/10' : 'hover:shadow-md'}`}>
+    <div ref={setNodeRef} style={style} className={`border border-border rounded-lg shadow-sm transition-all ${
+      pebble.focusToday
+        ? 'bg-primary/5 border-primary/30 shadow-primary/10'
+        : 'bg-card hover:shadow-md'
+      } ${expanded ? 'shadow-md ring-1 ring-primary/10' : ''}`}>
 
-      {/* ✅ Pebble header: stacked layout */}
       <div className="px-3 py-2.5">
-
-        {/* Row 1: grip + expand + judul full width */}
+        {/* Row 1: grip + expand + judul */}
         <div className="flex items-start gap-2">
           {!readOnly && (
             <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none shrink-0 mt-0.5">
@@ -134,7 +142,6 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
               <button type="button" onClick={() => { setEditText(pebble.text); setEditing(false); }} className="text-muted-foreground shrink-0"><X size={12} /></button>
             </form>
           ) : (
-            // ✅ Judul pebble full width
             <span onClick={() => setExpanded(!expanded)}
               className={`font-body flex-1 cursor-pointer text-sm leading-snug ${pebble.status === 'done' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
               {pebble.text}
@@ -142,16 +149,30 @@ const SortablePebble = ({ pebble, spark, boulderTitle, readOnly, onToggle, onDel
           )}
         </div>
 
-        {/* ✅ Row 2: status + answer + edit + delete di bawah judul */}
+        {/* Row 2: actions */}
         {!editing && (
           <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
-            {/* Status badge */}
+            {/* Status */}
             <button onClick={() => !readOnly && onToggle()} disabled={readOnly}
               className={`px-2 py-0.5 text-[11px] rounded-full font-body transition-colors ${statusColors[pebble.status]}`}>
               {statusLabels[pebble.status]}
             </button>
 
-            {/* Answer button */}
+            {/* ✅ Anvil toggle */}
+            {!readOnly && (
+              <button onClick={handleToggleFocus}
+                title={pebble.focusToday ? 'Hapus dari The Anvil' : 'Tambah ke The Anvil'}
+                className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full transition-colors ${
+                  pebble.focusToday
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                }`}>
+                <Hammer size={10} />
+                {pebble.focusToday ? 'Anvil ✓' : 'Anvil'}
+              </button>
+            )}
+
+            {/* Answer */}
             {!readOnly && (
               <button onClick={handleAnswer} disabled={isAnswering}
                 className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50">

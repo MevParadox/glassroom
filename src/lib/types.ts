@@ -13,6 +13,7 @@ export interface Pebble {
   content?: string; // Tiptap rich text JSON
   notes?: string;
   attachments?: Attachment[];
+  focusToday?: boolean;
 }
 
 export interface Boulder {

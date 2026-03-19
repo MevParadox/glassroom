@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmDialog from './ConfirmDialog';
 import PebbleEditor from './PebbleEditor';
 import { toast } from 'sonner';
+import { callAI, buildAnswerPrompt } from '@/lib/ai';
 
 const statusColors: Record<Pebble['status'], string> = {
   'todo': 'bg-muted text-muted-foreground',
@@ -24,7 +25,7 @@ interface SortablePebbleProps {
   pebble: Pebble;
   spark: string;
   boulderTitle: string;
-  boulderPebbles: Pebble[]; // ✅ semua pebble di boulder ini
+  boulderPebbles: Pebble[];
   readOnly?: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -59,67 +60,18 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
     setIsAnswering(true);
     setExpanded(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API key tidak ditemukan');
-
-      // ✅ Context chaining — ambil 150 char pertama dari pebble lain yang sudah punya content
+      // Context chaining — hanya pebble yang sudah punya content
       const contextPebbles = boulderPebbles
         .filter(p => p.id !== pebble.id && p.content)
         .map(p => `- "${p.text}": ${p.content?.substring(0, 150)}...`)
         .join('\n');
 
       const contextSection = contextPebbles
-        ? `\nContext from other completed tasks in this phase (use this to stay consistent):\n${contextPebbles}\n`
+        ? `\nKonteks dari task lain yang sudah selesai di fase ini (gunakan untuk konsistensi):\n${contextPebbles}\n`
         : '';
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are a knowledgeable assistant. A user is working on a project and needs a DIRECT ANSWER to a specific question or task.
-
-Project context: "${spark}"
-Current phase: "${boulderTitle}"
-Task/Question: "${pebble.text}"
-${contextSection}
-IMPORTANT: Do NOT give instructions, steps, or sub-tasks.
-Give the ACTUAL ANSWER directly — as if you already know the answer and are sharing it.
-If context from other tasks is provided, make sure your answer is CONSISTENT with them.
-
-FORMAT RULES:
-1. Start with a 2-3 sentence SUMMARY of your answer (the hook — someone reading only this should get the core idea)
-2. Then provide the full detailed answer
-
-Example:
-- Task: "Tentukan poin masalah MBG spesifik"
-- WRONG: "Identifikasi masalah, prioritaskan, tentukan sudut pandang..."
-- RIGHT: 
-  [Summary] "Program MBG menghadapi 3 masalah utama: kualitas gizi, distribusi tidak merata, dan kurangnya transparansi anggaran."
-  [Detail] "1. Kualitas Gizi... 2. Distribusi..."
-
-Use the same language as the task.
-Format in clean HTML using only: <p>, <ul>, <li>, <ol>, <strong>, <em>
-The summary must be wrapped in <p><strong>...</strong></p> so it stands out.
-Never cut off mid-sentence. Always finish completely.
-No code fences, raw HTML only.`,
-              }],
-            }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err?.error?.message || 'Request ke Gemini gagal');
-      }
-
-      const data = await response.json();
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const prompt = buildAnswerPrompt(spark, boulderTitle, pebble.text, contextSection);
+      const raw = await callAI(prompt, { temperature: 0.5, maxTokens: 8192 });
       const html = raw.replace(/```html|```/g, '').trim();
       onUpdatePebble({ content: html });
       toast.success('AI answer ready!');
@@ -138,7 +90,6 @@ No code fences, raw HTML only.`,
       } ${expanded ? 'shadow-md ring-1 ring-primary/10' : ''}`}>
 
       <div className="px-3 py-2.5">
-        {/* Row 1: grip + expand + judul */}
         <div className="flex items-start gap-2">
           {!readOnly && (
             <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground touch-none shrink-0 mt-0.5">
@@ -164,7 +115,6 @@ No code fences, raw HTML only.`,
           )}
         </div>
 
-        {/* Row 2: actions */}
         {!editing && (
           <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
             <button onClick={() => !readOnly && onToggle()} disabled={readOnly}
@@ -205,9 +155,9 @@ No code fences, raw HTML only.`,
                       <Trash2 size={11} />
                     </button>
                   }
-                  title="Delete pebble?"
-                  description={`"${pebble.text}" will be permanently removed.`}
-                  confirmLabel="Delete"
+                  title="Hapus pebble?"
+                  description={`"${pebble.text}" akan dihapus permanen.`}
+                  confirmLabel="Hapus"
                   onConfirm={onDelete}
                 />
               </>

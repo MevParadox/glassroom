@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Project, Boulder, Pebble } from '@/lib/types';
 import { generateId } from '@/lib/store';
-import { ArrowLeft, Archive, Plus, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Archive, Plus, Pencil, Check, X, Flame } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import AutoHammer from './AutoHammer';
 import SortableBoulder from './SortableBoulder';
+import ForgeModal from './ForgeModal';
 
 interface ProjectDetailProps {
   project: Project;
@@ -28,6 +29,7 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
   const [editingSpark, setEditingSpark] = useState(false);
   const [sparkText, setSparkText] = useState(project.spark);
   const [focusedPebbleId, setFocusedPebbleId] = useState<string | null>(null);
+  const [showForge, setShowForge] = useState(false);
 
   const totalPebbles = project.boulders.reduce((sum, b) => sum + b.pebbles.length, 0);
   const donePebbles = project.boulders.reduce((sum, b) => sum + b.pebbles.filter(p => p.status === 'done').length, 0);
@@ -156,11 +158,24 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-body transition-colors">
           <ArrowLeft size={16} /> Back
         </button>
-        {!readOnly && allDone && (
-          <button onClick={onArchive} className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
-            <Archive size={13} /> Archive
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* ✅ Forge button — selalu tampil kalau ada boulder */}
+          {!readOnly && project.boulders.length > 0 && (
+            <button
+              onClick={() => setShowForge(true)}
+              title="Forge Final Draft — export project jadi dokumen"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-body text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-md transition-colors"
+            >
+              <Flame size={13} />
+              Forge
+            </button>
+          )}
+          {!readOnly && allDone && (
+            <button onClick={onArchive} className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
+              <Archive size={13} /> Archive
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Spark title + Auto Hammer */}
@@ -174,7 +189,6 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
             </form>
           ) : (
             <div className="flex items-start gap-2 group/spark flex-1 min-w-0">
-              {/* ✅ font lebih kecil di mobile */}
               <h2 className="font-display text-xl sm:text-3xl text-foreground leading-snug">{project.spark}</h2>
               {!readOnly && (
                 <button onClick={() => { setSparkText(project.spark); setEditingSpark(true); }} className="text-muted-foreground hover:text-foreground opacity-0 group-hover/spark:opacity-100 transition-opacity shrink-0 mt-1">
@@ -184,7 +198,6 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
             </div>
           )}
 
-          {/* ✅ Auto Hammer — shrink-0 biar ga wrap */}
           {!readOnly && !editingSpark && (
             <div className="shrink-0">
               <AutoHammer spark={project.spark} onGenerated={(boulders) => onUpdate({ ...project, boulders })} />
@@ -237,9 +250,14 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly }: Proje
       {/* Add boulder */}
       {!readOnly && (
         <form onSubmit={(e) => { e.preventDefault(); addBoulder(); }} className="flex gap-2">
-          <input type="text" value={newBoulderTitle} onChange={(e) => setNewBoulderTitle(e.target.value)} placeholder="Add a boulder (phase)…" className="flex-1 px-3 py-2 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
-          <button type="submit" className="px-3 py-2 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap">Add</button>
+          <input type="text" value={newBoulderTitle} onChange={(e) => setNewBoulderTitle(e.target.value)} placeholder="Tambah boulder (fase)…" className="flex-1 px-3 py-2 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
+          <button type="submit" className="px-3 py-2 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap">Tambah</button>
         </form>
+      )}
+
+      {/* Forge Modal */}
+      {showForge && (
+        <ForgeModal project={project} onClose={() => setShowForge(false)} />
       )}
     </div>
   );

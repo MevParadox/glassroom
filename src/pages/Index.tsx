@@ -19,6 +19,8 @@ import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap, LogOut, Hamme
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useProStatus } from '@/hooks/useProStatus';
 import { supabase } from '@/lib/supabase';
+import { useDarkMode } from '@/hooks/useDarkMode';
+import { Moon, Sun } from 'lucide-react'; // tambah ke import lucide
 
 type Tab = 'inbox' | 'workshop' | 'anvil' | 'archive' | 'cryo' | 'trash';
 
@@ -250,6 +252,23 @@ const Index = () => {
   const avatarInitial = userEmail ? userEmail[0].toUpperCase() : '?';
   const trialUrgent = trialDaysLeft <= 2;
   const trialWarning = trialDaysLeft <= 4;
+  const { isDark, toggle } = useDarkMode();
+
+  const handleRestoreProject = (id: string) => {
+  updateProjects(projects.map(p => p.id === id ? { ...p, archived: false } : p));
+  toast.success('Project dikembalikan ke Workshop!');
+  };
+
+  const handleDeleteArchivedProject = async (id: string) => {
+  const project = projects.find(p => p.id === id);
+  if (!project) return;
+  await moveToTrash('project', project);
+  const newTrash = await getTrash();
+  setTrashItems(newTrash);
+  updateProjects(projects.filter(p => p.id !== id));
+  toast('Project dipindah ke Trash');
+  };
+
 
   if (loading) {
     return (
@@ -319,6 +338,13 @@ const Index = () => {
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left">
                       <Zap size={14} className="text-primary" />
                       {isPro && !isTrialing ? 'Kelola Langganan' : 'Upgrade ke Pro'}
+                    </button>
+                    <button
+                      onClick={() => { toggle(); }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left border-t border-border"
+                    >
+                      {isDark ? <Sun size={14} className="text-primary" /> : <Moon size={14} className="text-primary" />}
+                      {isDark ? 'Light Mode' : 'Dark Mode'}
                     </button>
                     <button onClick={() => { handleLogout(); setShowDropdown(false); }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors text-left border-t border-border">
@@ -404,7 +430,14 @@ const Index = () => {
           {activeTab === 'anvil' && (
             <AnvilView projects={projects} onUpdatePebble={handleAnvilUpdatePebble} onTogglePebble={handleAnvilTogglePebble} />
           )}
-          {activeTab === 'archive' && <ArchiveView projects={projects} searchQuery={searchQuery} />}
+          {activeTab === 'archive' && (
+            <ArchiveView
+              projects={projects}
+              searchQuery={searchQuery}
+              onRestoreProject={handleRestoreProject}
+              onDeleteProject={handleDeleteArchivedProject}
+            />
+          )}
           {activeTab === 'cryo' && (
             <div className="space-y-2">
               {cryochamber.length === 0 ? (

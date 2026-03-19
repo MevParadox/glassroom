@@ -9,6 +9,7 @@ import SortablePebble from './SortablePebble';
 import ConfirmDialog from './ConfirmDialog';
 import { generateId } from '@/lib/store';
 import { toast } from 'sonner';
+import { callAI, parseJsonArray, buildHammerPrompt, buildRefinePrompt, buildMorePebblesPrompt } from '@/lib/ai';
 
 interface SortableBoulderProps {
   boulder: Boulder;
@@ -31,37 +32,6 @@ interface SortableBoulderProps {
   focusedPebbleId?: string | null;
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error('API key tidak ditemukan. Cek file .env kamu!');
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err?.error?.message || 'Request ke Gemini API gagal');
-  }
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-function parseJsonArray(raw: string): string[] {
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('Tidak ada JSON array ditemukan di response');
-  return JSON.parse(match[0]);
-}
-
 const SortableBoulder = ({
   boulder, spark, readOnly, newPebbleText, onNewPebbleTextChange,
   onAddPebble, onDeleteBoulder, onEditBoulder, onTogglePebble, onDeletePebble, onEditPebble,
@@ -82,13 +52,7 @@ const SortableBoulder = ({
   const hammerBoulder = async () => {
     setIsHammering(true);
     try {
-      const raw = await callGemini(`You are a project planning assistant.
-Project idea: "${spark}"
-Phase/Boulder: "${boulder.title}"
-Generate specific, actionable tasks for this phase.
-Return ONLY a valid JSON array of task strings, no explanation, no markdown, no backticks:
-["Task 1", "Task 2", "Task 3"]
-Rules: 3-5 tasks, specific to project and phase, use same language as project idea.`);
+      const raw = await callAI(buildHammerPrompt(spark, boulder.title), { temperature: 0.7, maxTokens: 2000 });
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
@@ -105,11 +69,7 @@ Rules: 3-5 tasks, specific to project and phase, use same language as project id
     setIsRefining(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callGemini(`Project: "${spark}", Phase: "${boulder.title}"
-Current tasks:\n${existingTasks}
-User feedback: "${refinePrompt}"
-Revise tasks based on feedback. Return ONLY JSON array: ["Task 1", "Task 2"]
-Use same language as project idea.`);
+      const raw = await callAI(buildRefinePrompt(spark, boulder.title, existingTasks, refinePrompt), { temperature: 0.7, maxTokens: 2000 });
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
@@ -127,10 +87,7 @@ Use same language as project idea.`);
     setIsAdding(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callGemini(`Project: "${spark}", Phase: "${boulder.title}"
-Existing tasks (DO NOT repeat): ${existingTasks}
-Add 2-3 new complementary tasks. Return ONLY JSON array: ["New Task 1", "New Task 2"]
-Use same language as project idea.`);
+      const raw = await callAI(buildMorePebblesPrompt(spark, boulder.title, existingTasks), { temperature: 0.7, maxTokens: 2000 });
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onAddPebbles(boulder.id, pebbles);
@@ -155,7 +112,6 @@ Use same language as project idea.`);
 
   return (
     <div ref={setNodeRef} style={style} className="bg-card border border-border rounded-lg p-4">
-
       <div className="mb-3">
         <div className="flex items-start gap-2 w-full">
           {!readOnly && (
@@ -211,9 +167,9 @@ Use same language as project idea.`);
                   <Trash2 size={12} />
                 </button>
               }
-              title="Delete boulder?"
-              description={`"${boulder.title}" and all its pebbles will be permanently removed.`}
-              confirmLabel="Delete"
+              title="Hapus boulder?"
+              description={`"${boulder.title}" dan semua pebble-nya akan dihapus permanen.`}
+              confirmLabel="Hapus"
               onConfirm={onDeleteBoulder}
             />
           </div>
@@ -223,7 +179,7 @@ Use same language as project idea.`);
       {showRefineInput && (
         <div className="mb-3 flex gap-2">
           <input type="text" value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)}
-            placeholder="e.g. 'more technical', 'focus on design'…"
+            placeholder="e.g. 'lebih teknikal', 'fokus ke desain'…"
             className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
             onKeyDown={(e) => e.key === 'Enter' && refinePebbles()} autoFocus />
           <button onClick={refinePebbles} disabled={isRefining || !refinePrompt.trim()}
@@ -245,7 +201,7 @@ Use same language as project idea.`);
                 pebble={pebble}
                 spark={spark}
                 boulderTitle={boulder.title}
-                boulderPebbles={boulder.pebbles} // ✅ pass semua pebble di boulder ini
+                boulderPebbles={boulder.pebbles}
                 readOnly={readOnly}
                 onToggle={() => onTogglePebble(pebble.id)}
                 onDelete={() => onDeletePebble(pebble.id)}
@@ -262,7 +218,7 @@ Use same language as project idea.`);
       {!readOnly && (
         <form onSubmit={(e) => { e.preventDefault(); onAddPebble(); }} className="mt-3 flex gap-2">
           <input type="text" value={newPebbleText} onChange={(e) => onNewPebbleTextChange(e.target.value)}
-            placeholder="Add a pebble…"
+            placeholder="Tambah pebble…"
             className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
           <button type="submit" className="px-3 py-1.5 text-sm font-body bg-secondary text-secondary-foreground rounded-md hover:opacity-80 shrink-0">
             <Plus size={14} />

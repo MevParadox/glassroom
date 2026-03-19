@@ -48,6 +48,46 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  /* ✅ Dark mode variables */
+  .dark {
+    --background: 220 15% 10%;
+    --foreground: 40 20% 92%;
+
+    --card: 220 15% 13%;
+    --card-foreground: 40 20% 92%;
+
+    --popover: 220 15% 13%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 32 80% 55%;
+    --primary-foreground: 220 15% 10%;
+
+    --secondary: 220 12% 18%;
+    --secondary-foreground: 40 20% 85%;
+
+    --muted: 220 12% 16%;
+    --muted-foreground: 40 10% 55%;
+
+    --accent: 32 80% 55%;
+    --accent-foreground: 220 15% 10%;
+
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 40 20% 92%;
+
+    --border: 220 12% 20%;
+    --input: 220 12% 20%;
+    --ring: 32 80% 55%;
+
+    --sidebar-background: 220 15% 8%;
+    --sidebar-foreground: 40 20% 85%;
+    --sidebar-primary: 32 80% 55%;
+    --sidebar-primary-foreground: 220 15% 10%;
+    --sidebar-accent: 220 12% 16%;
+    --sidebar-accent-foreground: 40 20% 85%;
+    --sidebar-border: 220 12% 20%;
+    --sidebar-ring: 32 80% 55%;
+  }
 }
 
 @layer base {
@@ -58,6 +98,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, h4 {
@@ -99,7 +140,7 @@
 }
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  float: left;
+  position: absolute;
   color: hsl(var(--muted-foreground));
   pointer-events: none;
   height: 0;

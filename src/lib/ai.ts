@@ -62,12 +62,14 @@ export async function callAIWithCredit(
 ): Promise<string> {
   const cost = CREDIT_COSTS[action];
 
-  // Free actions skip credit check
+  // ✅ Panggil AI DULU
+  const result = await callAI(prompt, options);
+
+  // ✅ Baru deduct credit kalau berhasil
   if (cost > 0) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Deduct credits
     const { data, error } = await supabase.rpc('deduct_credits', {
       p_user_id: user.id,
       p_amount: cost,
@@ -81,7 +83,7 @@ export async function callAIWithCredit(
     }
   }
 
-  return callAI(prompt, options);
+  return result;
 }
 
 // ─── Get current credits ──────────────────────────────────

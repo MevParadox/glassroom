@@ -11,50 +11,58 @@ const CREDIT_COSTS: Record<string, number> = {
   ANSWER: 3,
   FORGE_NARRATIVE: 15,
   FORGE_STRUCTURED: 0,
+  NONE: 0,
 };
 
-Deno.serve(async (req) => {
-  // CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Auth check
+    // ✅ Manual auth — ambil token dari header
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     }
 
-    // Init Supabase client
+    const token = authHeader.replace('Bearer ', '');
+
+    // ✅ Init Supabase dengan service role untuk verify user
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // ✅ Verify JWT dan get user
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    }
+
+    // ✅ Supabase client dengan context user
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Get user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     // Parse request
     const { messages, action, options = {} } = await req.json();
     if (!messages || !action) {
-      return Response.json({ error: 'Missing messages or action' }, { status: 400 });
+      return Response.json({ error: 'Missing messages or action' }, { status: 400, headers: corsHeaders });
     }
 
     const cost = CREDIT_COSTS[action] ?? 0;
 
-    // Check credits before calling AI
+    // ✅ Check credits sebelum call AI
     if (cost > 0) {
-      const { data: creditData } = await supabase
+      const { data: creditData } = await supabaseAdmin
         .from('user_credits')
         .select('credits')
         .eq('user_id', user.id)
@@ -64,11 +72,11 @@ Deno.serve(async (req) => {
         return Response.json({
           error: 'INSUFFICIENT_CREDITS',
           credits: creditData?.credits ?? 0,
-        }, { status: 402 });
+        }, { status: 402, headers: corsHeaders });
       }
     }
 
-    // Call Groq API — key is safe on server side
+    // ✅ Call Groq — key aman di server
     const groqBody: Record<string, unknown> = {
       model: GROQ_MODEL,
       messages,
@@ -91,15 +99,15 @@ Deno.serve(async (req) => {
 
     if (!groqRes.ok) {
       const err = await groqRes.json();
-      return Response.json({ error: err?.error?.message || 'Groq API error' }, { status: 500 });
+      return Response.json({ error: err?.error?.message || 'Groq API error' }, { status: 500, headers: corsHeaders });
     }
 
     const groqData = await groqRes.json();
     const content = groqData.choices?.[0]?.message?.content || '';
 
-    // Deduct credits AFTER successful AI call
+    // ✅ Deduct credits AFTER successful AI call
     if (cost > 0) {
-      const { data: deductResult } = await supabase.rpc('deduct_credits', {
+      const { data: deductResult } = await supabaseAdmin.rpc('deduct_credits', {
         p_user_id: user.id,
         p_amount: cost,
         p_action: action.toLowerCase(),
@@ -109,19 +117,15 @@ Deno.serve(async (req) => {
       return Response.json({
         content,
         credits: deductResult?.credits ?? null,
-      }, {
-        headers: { 'Access-Control-Allow-Origin': '*' },
-      });
+      }, { headers: corsHeaders });
     }
 
-    return Response.json({ content }, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    });
+    return Response.json({ content }, { headers: corsHeaders });
 
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : 'Internal error' },
-      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } }
+      { status: 500, headers: corsHeaders }
     );
   }
 });

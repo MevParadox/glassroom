@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmDialog from './ConfirmDialog';
 import PebbleEditor from './PebbleEditor';
 import { toast } from 'sonner';
-import { callAI, buildAnswerPrompt } from '@/lib/ai';
+import { callAIWithCredit, buildAnswerPrompt, getUserCredits } from '@/lib/ai';
 
 const statusColors: Record<Pebble['status'], string> = {
   'todo': 'bg-muted text-muted-foreground',
@@ -33,9 +33,10 @@ interface SortablePebbleProps {
   onUpdatePebble: (updates: Partial<Pebble>) => void;
   onFocusMode?: () => void;
   isFocused?: boolean;
+  onInsufficientCredits?: () => void;
 }
 
-const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly, onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused }: SortablePebbleProps) => {
+const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly, onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused, onInsufficientCredits }: SortablePebbleProps) => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(pebble.text);
   const [expanded, setExpanded] = useState(false);
@@ -53,30 +54,41 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
   const handleToggleFocus = () => {
     const next = !pebble.focusToday;
     onUpdatePebble({ focusToday: next });
-    toast(next ? '🔨 Ditambah ke The Anvil!' : 'Dihapus dari The Anvil');
+    toast(next ? '🔨 Added to The Anvil!' : 'Removed from The Anvil');
   };
 
   const handleAnswer = async () => {
     setIsAnswering(true);
     setExpanded(true);
     try {
-      // Context chaining — hanya pebble yang sudah punya content
       const contextPebbles = boulderPebbles
         .filter(p => p.id !== pebble.id && p.content)
         .map(p => `- "${p.text}": ${p.content?.substring(0, 150)}...`)
         .join('\n');
 
       const contextSection = contextPebbles
-        ? `\nKonteks dari task lain yang sudah selesai di fase ini (gunakan untuk konsistensi):\n${contextPebbles}\n`
+        ? `\nContext from other completed tasks in this phase (use for consistency):\n${contextPebbles}\n`
         : '';
 
       const prompt = buildAnswerPrompt(spark, boulderTitle, pebble.text, contextSection);
-      const raw = await callAI(prompt, { temperature: 0.5, maxTokens: 8192 });
+      const raw = await callAIWithCredit(prompt, 'ANSWER', { temperature: 0.5, maxTokens: 8192 });
       const html = raw.replace(/```html|```/g, '').trim();
       onUpdatePebble({ content: html });
       toast.success('AI answer ready!');
+
+      // Show remaining credits
+      const remaining = await getUserCredits();
+      toast(`${remaining} credits remaining`, { duration: 2000 });
+
     } catch (err: unknown) {
-      toast.error(`Answer gagal: ${err instanceof Error ? err.message : 'Error'}`);
+      const message = err instanceof Error ? err.message : 'Error';
+      if (message.startsWith('INSUFFICIENT_CREDITS')) {
+        const remaining = message.split(':')[1] || '0';
+        toast.error(`Not enough credits (${remaining} left). Top up to continue.`);
+        onInsufficientCredits?.();
+      } else {
+        toast.error(`Answer failed: ${message}`);
+      }
     } finally {
       setIsAnswering(false);
     }
@@ -84,10 +96,8 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
 
   return (
     <div ref={setNodeRef} style={style} className={`border border-border rounded-lg shadow-sm transition-all ${
-      pebble.focusToday
-        ? 'bg-primary/5 border-primary/30 shadow-primary/10'
-        : 'bg-card hover:shadow-md'
-      } ${expanded ? 'shadow-md ring-1 ring-primary/10' : ''}`}>
+      pebble.focusToday ? 'bg-primary/5 border-primary/30 shadow-primary/10' : 'bg-card hover:shadow-md'
+    } ${expanded ? 'shadow-md ring-1 ring-primary/10' : ''}`}>
 
       <div className="px-3 py-2.5">
         <div className="flex items-start gap-2">
@@ -124,11 +134,9 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
 
             {!readOnly && (
               <button onClick={handleToggleFocus}
-                title={pebble.focusToday ? 'Hapus dari The Anvil' : 'Tambah ke The Anvil'}
+                title={pebble.focusToday ? 'Remove from The Anvil' : 'Add to The Anvil'}
                 className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-body rounded-full transition-colors ${
-                  pebble.focusToday
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  pebble.focusToday ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary'
                 }`}>
                 <Hammer size={10} />
                 {pebble.focusToday ? 'Anvil ✓' : 'Anvil'}
@@ -145,19 +153,14 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
 
             {!readOnly && (
               <>
-                <button onClick={() => { setEditText(pebble.text); setEditing(true); }}
-                  className="text-muted-foreground hover:text-foreground p-0.5">
+                <button onClick={() => { setEditText(pebble.text); setEditing(true); }} className="text-muted-foreground hover:text-foreground p-0.5">
                   <Pencil size={11} />
                 </button>
                 <ConfirmDialog
-                  trigger={
-                    <button className="text-muted-foreground hover:text-destructive p-0.5">
-                      <Trash2 size={11} />
-                    </button>
-                  }
-                  title="Hapus pebble?"
-                  description={`"${pebble.text}" akan dihapus permanen.`}
-                  confirmLabel="Hapus"
+                  trigger={<button className="text-muted-foreground hover:text-destructive p-0.5"><Trash2 size={11} /></button>}
+                  title="Delete pebble?"
+                  description={`"${pebble.text}" will be permanently removed.`}
+                  confirmLabel="Delete"
                   onConfirm={onDelete}
                 />
               </>
@@ -168,26 +171,15 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
 
       <AnimatePresence>
         {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className="px-4 pb-4 border-t border-border pt-3">
               {isAnswering && (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground font-body">
                   <Sparkles size={14} className="animate-pulse text-primary" />
-                  AI sedang menjawab task ini…
+                  AI is answering this task…
                 </div>
               )}
-              <PebbleEditor
-                pebble={pebble}
-                onUpdate={onUpdatePebble}
-                onFocusMode={onFocusMode}
-                isFocused={isFocused}
-              />
+              <PebbleEditor pebble={pebble} onUpdate={onUpdatePebble} onFocusMode={onFocusMode} isFocused={isFocused} />
             </div>
           </motion.div>
         )}

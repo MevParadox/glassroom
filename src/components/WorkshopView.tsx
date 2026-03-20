@@ -61,14 +61,14 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground font-body">
-          {activeProjects.length} project aktif
+          {activeProjects.length} active project{activeProjects.length !== 1 ? 's' : ''}
         </p>
         <button
           onClick={() => setShowNewInput(true)}
-          title="Buat project baru dari ide"
+          title="Create a new project from an idea"
           className="flex items-center gap-2 px-4 py-2 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
         >
-          <Plus size={14} /> Project Baru
+          <Plus size={14} /> New Project
         </button>
       </div>
 
@@ -83,15 +83,15 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
             type="text"
             value={newSpark}
             onChange={(e) => setNewSpark(e.target.value)}
-            placeholder="Apa ide atau projectnya?"
+            placeholder="What's the idea or project?"
             autoFocus
             className="flex-1 px-4 py-2.5 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
           />
           <button type="submit" className="px-4 py-2.5 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
-            Buat
+            Create
           </button>
           <button type="button" onClick={() => { setShowNewInput(false); setNewSpark(''); }} className="px-3 py-2.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors">
-            Batal
+            Cancel
           </button>
         </motion.form>
       )}
@@ -99,7 +99,7 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
       {filteredProjects.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <p className="text-lg font-body">
-            {q ? `Tidak ada project yang cocok dengan "${searchQuery}"` : 'Belum ada project aktif. Proses ide atau buat project baru.'}
+            {q ? `No projects match "${searchQuery}"` : 'No active projects. Process an idea or create one.'}
           </p>
         </div>
       ) : (
@@ -109,57 +109,42 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
               <motion.div key={project.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative group">
                 <ProjectCard project={project} onClick={() => setSelectedId(project.id)} />
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-
-                  {/* Archive manual */}
                   <ConfirmDialog
                     trigger={
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        title="Arsipkan project yang sudah selesai"
-                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-primary transition-colors"
-                      >
+                      <button onClick={(e) => e.stopPropagation()} title="Archive this project"
+                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-primary transition-colors">
                         <Archive size={14} />
                       </button>
                     }
-                    title="Arsipkan project?"
-                    description={`"${project.spark}" akan dipindah ke Archive.`}
-                    confirmLabel="Arsipkan"
+                    title="Archive project?"
+                    description={`"${project.spark}" will be moved to Archive.`}
+                    confirmLabel="Archive"
                     variant="default"
                     onConfirm={() => onArchiveProject(project.id)}
                   />
-
-                  {/* Freeze */}
                   <ConfirmDialog
                     trigger={
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        title="Bekukan ke Cryochamber — simpan untuk nanti"
-                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-blue-400 transition-colors"
-                      >
+                      <button onClick={(e) => e.stopPropagation()} title="Freeze to Cryochamber — save for later"
+                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-blue-400 transition-colors">
                         <Snowflake size={14} />
                       </button>
                     }
-                    title="Bekukan project?"
-                    description={`"${project.spark}" akan dipindah ke Cryochamber.`}
-                    confirmLabel="Bekukan"
+                    title="Freeze project?"
+                    description={`"${project.spark}" will be moved to Cryochamber.`}
+                    confirmLabel="Freeze"
                     variant="default"
                     onConfirm={() => onFreezeProject(project.id)}
                   />
-
-                  {/* Trash — soft delete */}
                   <ConfirmDialog
                     trigger={
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        title="Pindah ke Trash — bisa dipulihkan nanti"
-                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-destructive transition-colors"
-                      >
+                      <button onClick={(e) => e.stopPropagation()} title="Move to Trash — can be restored later"
+                        className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-destructive transition-colors">
                         <Trash2 size={14} />
                       </button>
                     }
-                    title="Hapus project?"
-                    description={`"${project.spark}" akan dipindah ke Trash. Bisa dipulihkan nanti.`}
-                    confirmLabel="Hapus"
+                    title="Delete project?"
+                    description={`"${project.spark}" will be moved to Trash. You can restore it later.`}
+                    confirmLabel="Delete"
                     onConfirm={() => onDeleteProject(project.id)}
                   />
                 </div>

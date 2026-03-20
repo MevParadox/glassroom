@@ -34,23 +34,16 @@ const AnvilCard = ({ pebble, spark, boulderTitle, projectId, boulderId, onUpdate
   onTogglePebble: AnvilViewProps['onTogglePebble'];
 }) => {
   const [expanded, setExpanded] = useState(false);
-
   const hasContent = pebble.content || pebble.notes;
 
   return (
     <div className={`border rounded-lg transition-all ${
-      pebble.status === 'done'
-        ? 'border-primary/20 opacity-60'
-        : 'border-primary/30 bg-primary/5'
+      pebble.status === 'done' ? 'border-primary/20 opacity-60' : 'border-primary/30 bg-primary/5'
     }`}>
-      {/* Header */}
       <div className="p-4">
-        {/* Breadcrumb */}
         <p className="text-[10px] font-body text-muted-foreground mb-1.5 truncate">
           {spark} → {boulderTitle}
         </p>
-
-        {/* Judul + expand toggle */}
         <div className="flex items-start gap-2 cursor-pointer" onClick={() => hasContent && setExpanded(!expanded)}>
           {hasContent && (
             <button className="text-muted-foreground shrink-0 mt-0.5">
@@ -63,24 +56,20 @@ const AnvilCard = ({ pebble, spark, boulderTitle, projectId, boulderId, onUpdate
             {pebble.text}
           </p>
         </div>
-
-        {/* Actions */}
         <div className="flex items-center gap-2 flex-wrap mt-3">
           <button
             onClick={() => onTogglePebble(projectId, boulderId, pebble.id)}
             className={`px-2.5 py-1 text-xs rounded-full font-body transition-colors ${statusColors[pebble.status]}`}>
             {statusLabels[pebble.status]}
           </button>
-
           <button
             onClick={() => onUpdatePebble(projectId, boulderId, pebble.id, { focusToday: false })}
             className="px-2.5 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full transition-colors">
-            Hapus dari Anvil
+            Remove from Anvil
           </button>
         </div>
       </div>
 
-      {/* Expanded content */}
       <AnimatePresence>
         {expanded && hasContent && (
           <motion.div
@@ -91,18 +80,14 @@ const AnvilCard = ({ pebble, spark, boulderTitle, projectId, boulderId, onUpdate
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 border-t border-border/50 pt-3 space-y-3">
-              {/* AI Answer / Content */}
               {pebble.content && (
-                <div
-                  className="text-sm font-body text-foreground leading-relaxed prose prose-sm max-w-none
-                    [&>p]:mb-2 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:list-decimal [&>ol]:pl-4
-                    [&>ol]:mb-2 [&>li]:mb-1 [&>h2]:font-semibold [&>h2]:text-base [&>h2]:mb-2
-                    [&>strong]:font-semibold [&>em]:italic"
+                <div className="text-sm font-body text-foreground leading-relaxed prose prose-sm max-w-none
+                  [&>p]:mb-2 [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:list-decimal [&>ol]:pl-4
+                  [&>ol]:mb-2 [&>li]:mb-1 [&>h2]:font-semibold [&>h2]:text-base [&>h2]:mb-2
+                  [&>strong]:font-semibold [&>em]:italic"
                   dangerouslySetInnerHTML={{ __html: pebble.content }}
                 />
               )}
-
-              {/* Notes */}
               {pebble.notes && (
                 <div className="border-t border-border/50 pt-3">
                   <p className="text-[11px] font-body text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
@@ -119,23 +104,13 @@ const AnvilCard = ({ pebble, spark, boulderTitle, projectId, boulderId, onUpdate
 
 const AnvilView = ({ projects, onUpdatePebble, onTogglePebble }: AnvilViewProps) => {
   const anvilPebbles: AnvilPebble[] = [];
-  projects
-    .filter(p => !p.archived)
-    .forEach(project => {
-      project.boulders.forEach(boulder => {
-        boulder.pebbles
-          .filter(pebble => pebble.focusToday)
-          .forEach(pebble => {
-            anvilPebbles.push({
-              pebble,
-              spark: project.spark,
-              boulderTitle: boulder.title,
-              projectId: project.id,
-              boulderId: boulder.id,
-            });
-          });
+  projects.filter(p => !p.archived).forEach(project => {
+    project.boulders.forEach(boulder => {
+      boulder.pebbles.filter(pebble => pebble.focusToday).forEach(pebble => {
+        anvilPebbles.push({ pebble, spark: project.spark, boulderTitle: boulder.title, projectId: project.id, boulderId: boulder.id });
       });
     });
+  });
 
   const done = anvilPebbles.filter(p => p.pebble.status === 'done').length;
   const total = anvilPebbles.length;
@@ -144,9 +119,9 @@ const AnvilView = ({ projects, onUpdatePebble, onTogglePebble }: AnvilViewProps)
     return (
       <div className="text-center py-20 text-muted-foreground">
         <Hammer size={32} className="mx-auto mb-3 opacity-40" />
-        <p className="font-body text-base">The Anvil kosong.</p>
+        <p className="font-body text-base">The Anvil is empty.</p>
         <p className="font-body text-sm mt-1 opacity-70">
-          Tandai pebble dengan 🔨 Anvil dari Workshop untuk mulai fokus hari ini.
+          Mark pebbles with 🔨 Anvil from Workshop to focus on them today.
         </p>
       </div>
     );
@@ -154,14 +129,12 @@ const AnvilView = ({ projects, onUpdatePebble, onTogglePebble }: AnvilViewProps)
 
   return (
     <div className="space-y-4">
-      {/* Progress */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-body text-muted-foreground">{done}/{total} selesai hari ini</p>
+          <p className="text-sm font-body text-muted-foreground">{done}/{total} done today</p>
           {done === total && (
-            <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-              className="text-sm font-body text-primary">
-              🎉 Semua selesai!
+            <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-sm font-body text-primary">
+              🎉 All done!
             </motion.span>
           )}
         </div>
@@ -172,19 +145,11 @@ const AnvilView = ({ projects, onUpdatePebble, onTogglePebble }: AnvilViewProps)
         </div>
       </div>
 
-      {/* Pebble list */}
       <div className="space-y-2">
         {anvilPebbles.map(({ pebble, spark, boulderTitle, projectId, boulderId }) => (
-          <AnvilCard
-            key={pebble.id}
-            pebble={pebble}
-            spark={spark}
-            boulderTitle={boulderTitle}
-            projectId={projectId}
-            boulderId={boulderId}
-            onUpdatePebble={onUpdatePebble}
-            onTogglePebble={onTogglePebble}
-          />
+          <AnvilCard key={pebble.id} pebble={pebble} spark={spark} boulderTitle={boulderTitle}
+            projectId={projectId} boulderId={boulderId}
+            onUpdatePebble={onUpdatePebble} onTogglePebble={onTogglePebble} />
         ))}
       </div>
     </div>

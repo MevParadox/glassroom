@@ -15,7 +15,7 @@ const LoginPage = () => {
       },
     });
     if (error) {
-      toast.error('Login gagal: ' + error.message);
+      toast.error('Login failed: ' + error.message);
       setIsLoading(false);
     }
   };
@@ -23,7 +23,6 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm text-center space-y-8">
-        {/* Logo / Title */}
         <div>
           <h1 className="font-display text-4xl text-foreground tracking-tight">
             The Glass Room
@@ -33,14 +32,12 @@ const LoginPage = () => {
           </p>
         </div>
 
-        {/* Tagline */}
         <div className="space-y-2">
           <p className="font-body text-foreground text-sm leading-relaxed">
-            Untuk kamu yang punya banyak ide<br />tapi susah mulai eksekusi.
+            For the ones with too many ideas<br />and not enough execution.
           </p>
         </div>
 
-        {/* Login button */}
         <div className="space-y-3">
           <button
             onClick={handleGoogleLogin}
@@ -59,13 +56,11 @@ const LoginPage = () => {
             )}
             {isLoading ? 'Redirecting…' : 'Continue with Google'}
           </button>
-
           <p className="text-xs font-body text-muted-foreground">
-            Data kamu tersimpan aman di cloud ☁️
+            Your data is stored securely in the cloud ☁️
           </p>
         </div>
 
-        {/* Branding */}
         <div className="flex items-center justify-center gap-1.5 text-xs font-body text-muted-foreground/50">
           <Sparkles size={10} />
           <span>Powered by AI</span>

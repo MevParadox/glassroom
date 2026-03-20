@@ -29,7 +29,7 @@ function stripHtml(html: string): string {
 function printAsPDF(title: string, htmlContent: string) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    toast.error('Pop-up diblokir browser. Izinkan pop-up dan coba lagi.');
+    toast.error('Pop-up blocked by browser. Please allow pop-ups and try again.');
     return;
   }
 
@@ -72,13 +72,13 @@ function printAsPDF(title: string, htmlContent: string) {
 
 function buildStructuredHTML(project: Project): string {
   const date = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-  let html = `<h1>${project.spark}</h1><p class="meta">Dibuat pada ${date} · The Glass Room</p><hr class="divider">`;
+  let html = `<h1>${project.spark}</h1><p class="meta">Created on ${date} · The Glass Room</p><hr class="divider">`;
 
   project.boulders.forEach((boulder, bIdx) => {
     html += `<h2>${bIdx + 1}. ${boulder.title}</h2>`;
     boulder.pebbles.forEach((pebble, pIdx) => {
       const statusClass = `status-${pebble.status}`;
-      const statusLabel = pebble.status === 'todo' ? 'Belum dikerjakan' : pebble.status === 'in-progress' ? 'Sedang dikerjakan' : 'Selesai';
+      const statusLabel = pebble.status === 'todo' ? 'Not started' : pebble.status === 'in-progress' ? 'In progress' : 'Done';
       html += `<h3>${bIdx + 1}.${pIdx + 1} ${pebble.text}</h3>`;
       html += `<span class="status ${statusClass}">${statusLabel}</span>`;
       if (pebble.content) html += pebble.content;
@@ -161,7 +161,7 @@ Make it feel like a real document, not a list dump.`;
           {!result ? (
             <>
               <p className="text-sm font-body text-muted-foreground mb-4">
-                Pilih format untuk <strong className="text-foreground">"{project.spark}"</strong>
+                Choose a format for <strong className="text-foreground">"{project.spark}"</strong>
               </p>
 
               <div className="space-y-3 mb-6">
@@ -170,8 +170,8 @@ Make it feel like a real document, not a list dump.`;
                   <div className="flex items-start gap-3">
                     <Sparkles size={18} className="text-primary shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-body font-semibold text-foreground">Naratif — AI Craft</p>
-                      <p className="text-xs font-body text-muted-foreground mt-0.5">AI gabungkan semua planning jadi dokumen yang mengalir</p>
+                      <p className="text-sm font-body font-semibold text-foreground">Narrative — AI Craft</p>
+                      <p className="text-xs font-body text-muted-foreground mt-0.5">AI merges all planning into a cohesive, flowing document</p>
                     </div>
                   </div>
                 </button>
@@ -181,8 +181,8 @@ Make it feel like a real document, not a list dump.`;
                   <div className="flex items-start gap-3">
                     <List size={18} className="text-primary shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-body font-semibold text-foreground">Terstruktur — Export Apa Adanya</p>
-                      <p className="text-xs font-body text-muted-foreground mt-0.5">Export semua boulder, pebble, dan answer terstruktur</p>
+                      <p className="text-sm font-body font-semibold text-foreground">Structured — Export As Is</p>
+                      <p className="text-xs font-body text-muted-foreground mt-0.5">Export all boulders, pebbles, and answers in a structured format</p>
                     </div>
                   </div>
                 </button>
@@ -191,7 +191,7 @@ Make it feel like a real document, not a list dump.`;
               <button onClick={handleForge} disabled={!mode || isForging}
                 className="w-full py-2.5 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
                 {isForging ? (
-                  <><Loader2 size={14} className="animate-spin" />{mode === 'narrative' ? 'AI sedang menempa…' : 'Menyusun…'}</>
+                  <><Loader2 size={14} className="animate-spin" />{mode === 'narrative' ? 'AI is forging…' : 'Composing…'}</>
                 ) : (
                   <><FileText size={14} />Forge</>
                 )}
@@ -199,7 +199,7 @@ Make it feel like a real document, not a list dump.`;
             </>
           ) : (
             <>
-              <p className="text-xs font-body text-muted-foreground mb-3">✅ Dokumen siap! Klik Export untuk simpan sebagai PDF.</p>
+              <p className="text-xs font-body text-muted-foreground mb-3">✅ Document ready! Click Export to save as PDF.</p>
               <div className="border border-border rounded-lg p-4 max-h-64 overflow-y-auto text-sm font-body text-foreground prose prose-sm max-w-none
                 [&>h1]:text-base [&>h1]:font-semibold [&>h1]:mb-2 [&>h2]:text-sm [&>h2]:font-semibold [&>h2]:mt-3 [&>h2]:mb-1 [&>p]:mb-2 [&>ul]:list-disc [&>ul]:pl-4"
                 dangerouslySetInnerHTML={{ __html: result }} />
@@ -210,7 +210,7 @@ Make it feel like a real document, not a list dump.`;
                 </button>
                 <button onClick={() => setResult(null)}
                   className="px-4 py-2.5 text-sm font-body text-muted-foreground border border-border rounded-lg hover:bg-secondary/50 transition-colors">
-                  Ulang
+                  Start Over
                 </button>
               </div>
             </>

@@ -18,7 +18,7 @@ const InboxView = ({ ideas, onProcess, onDelete, onBankruptcy, onFreeze, searchQ
   if (ideas.length === 0) {
     return (
       <div className="text-center py-20 text-muted-foreground">
-        <p className="text-lg font-body">Inbox kosong. Capture ide di atas!</p>
+        <p className="text-lg font-body">Your inbox is empty. Capture something above!</p>
       </div>
     );
   }
@@ -27,10 +27,10 @@ const InboxView = ({ ideas, onProcess, onDelete, onBankruptcy, onFreeze, searchQ
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between mb-6">
-          <p className="text-sm text-muted-foreground font-body">{ideas.length} ide menunggu</p>
+          <p className="text-sm text-muted-foreground font-body">{ideas.length} idea{ideas.length !== 1 ? 's' : ''} waiting</p>
         </div>
         <div className="text-center py-12 text-muted-foreground">
-          <p className="text-sm font-body">Tidak ada ide yang cocok dengan "{searchQuery}"</p>
+          <p className="text-sm font-body">No ideas match "{searchQuery}"</p>
         </div>
       </div>
     );
@@ -39,10 +39,10 @@ const InboxView = ({ ideas, onProcess, onDelete, onBankruptcy, onFreeze, searchQ
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-muted-foreground font-body">{ideas.length} ide menunggu</p>
+        <p className="text-sm text-muted-foreground font-body">{ideas.length} idea{ideas.length !== 1 ? 's' : ''} waiting</p>
         <button
           onClick={onBankruptcy}
-          title="Pindahkan semua ide ke Cryochamber untuk dibekukan sementara"
+          title="Move all ideas to Cryochamber for later"
           className="flex items-center gap-2 px-4 py-2 text-sm font-body text-destructive hover:bg-destructive/10 rounded-md transition-colors"
         >
           <Snowflake size={14} />
@@ -62,28 +62,23 @@ const InboxView = ({ ideas, onProcess, onDelete, onBankruptcy, onFreeze, searchQ
           >
             <p className="font-body text-foreground flex-1 mr-4 text-sm">{idea.text}</p>
             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              {/* Process → Workshop */}
               <button
                 onClick={() => onProcess(idea)}
-                title="Proses ide ini — pecah jadi boulder & pebble di Workshop"
+                title="Process this idea — break it down in Workshop"
                 className="flex items-center gap-1 px-3 py-1.5 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
               >
-                Proses <ArrowRight size={14} />
+                Process <ArrowRight size={14} />
               </button>
-
-              {/* Freeze */}
               <button
                 onClick={() => onFreeze(idea)}
-                title="Bekukan ke Cryochamber — simpan untuk nanti"
+                title="Freeze to Cryochamber — save for later"
                 className="p-1.5 text-muted-foreground hover:text-blue-400 transition-colors"
               >
                 <Snowflake size={16} />
               </button>
-
-              {/* Trash — soft delete */}
               <button
                 onClick={() => onDelete(idea.id)}
-                title="Pindah ke Trash — bisa dipulihkan nanti"
+                title="Move to Trash — can be restored later"
                 className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
               >
                 <Trash2 size={16} />

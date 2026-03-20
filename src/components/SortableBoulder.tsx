@@ -9,7 +9,7 @@ import SortablePebble from './SortablePebble';
 import ConfirmDialog from './ConfirmDialog';
 import { generateId } from '@/lib/store';
 import { toast } from 'sonner';
-import { callAI, parseJsonArray, buildHammerPrompt, buildRefinePrompt, buildMorePebblesPrompt } from '@/lib/ai';
+import { callAIWithCredit, parseJsonArray, buildHammerPrompt, buildRefinePrompt, buildMorePebblesPrompt, getUserCredits } from '@/lib/ai';
 
 interface SortableBoulderProps {
   boulder: Boulder;
@@ -30,12 +30,14 @@ interface SortableBoulderProps {
   hidden?: boolean;
   onFocusPebble?: (pebbleId: string | null) => void;
   focusedPebbleId?: string | null;
+  onInsufficientCredits?: () => void;
 }
 
 const SortableBoulder = ({
   boulder, spark, readOnly, newPebbleText, onNewPebbleTextChange,
   onAddPebble, onDeleteBoulder, onEditBoulder, onTogglePebble, onDeletePebble, onEditPebble,
-  onUpdatePebble, onReorderPebbles, onReplacePebbles, onAddPebbles, hidden, onFocusPebble, focusedPebbleId,
+  onUpdatePebble, onReorderPebbles, onReplacePebbles, onAddPebbles, hidden, onFocusPebble,
+  focusedPebbleId, onInsufficientCredits,
 }: SortableBoulderProps) => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleText, setTitleText] = useState(boulder.title);
@@ -49,16 +51,36 @@ const SortableBoulder = ({
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const handleCreditError = (message: string) => {
+    if (message.startsWith('INSUFFICIENT_CREDITS')) {
+      const remaining = message.split(':')[1] || '0';
+      toast.error(`Not enough credits (${remaining} left). Top up to continue.`);
+      onInsufficientCredits?.();
+    }
+  };
+
+  const showRemainingCredits = async () => {
+    const remaining = await getUserCredits();
+    toast(`${remaining} credits remaining`, { duration: 2000 });
+  };
+
   const hammerBoulder = async () => {
     setIsHammering(true);
     try {
-      const raw = await callAI(buildHammerPrompt(spark, boulder.title), { temperature: 0.7, maxTokens: 2000 });
+      const raw = await callAIWithCredit(
+        buildHammerPrompt(spark, boulder.title),
+        'HAMMER_BOULDER',
+        { temperature: 0.7, maxTokens: 2000 }
+      );
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
       toast.success('Pebbles generated!');
+      await showRemainingCredits();
     } catch (err: unknown) {
-      toast.error(`Hammer gagal: ${err instanceof Error ? err.message : 'Error'}`);
+      const msg = err instanceof Error ? err.message : 'Error';
+      handleCreditError(msg);
+      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Hammer failed: ${msg}`);
     } finally {
       setIsHammering(false);
     }
@@ -69,15 +91,22 @@ const SortableBoulder = ({
     setIsRefining(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callAI(buildRefinePrompt(spark, boulder.title, existingTasks, refinePrompt), { temperature: 0.7, maxTokens: 2000 });
+      const raw = await callAIWithCredit(
+        buildRefinePrompt(spark, boulder.title, existingTasks, refinePrompt),
+        'REFINE',
+        { temperature: 0.7, maxTokens: 2000 }
+      );
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
       setRefinePrompt('');
       setShowRefineInput(false);
       toast.success('Pebbles refined!');
+      await showRemainingCredits();
     } catch (err: unknown) {
-      toast.error(`Refinement gagal: ${err instanceof Error ? err.message : 'Error'}`);
+      const msg = err instanceof Error ? err.message : 'Error';
+      handleCreditError(msg);
+      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Refine failed: ${msg}`);
     } finally {
       setIsRefining(false);
     }
@@ -87,13 +116,20 @@ const SortableBoulder = ({
     setIsAdding(true);
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
-      const raw = await callAI(buildMorePebblesPrompt(spark, boulder.title, existingTasks), { temperature: 0.7, maxTokens: 2000 });
+      const raw = await callAIWithCredit(
+        buildMorePebblesPrompt(spark, boulder.title, existingTasks),
+        'MORE_PEBBLES',
+        { temperature: 0.7, maxTokens: 2000 }
+      );
       const tasks = parseJsonArray(raw);
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onAddPebbles(boulder.id, pebbles);
       toast.success(`${pebbles.length} pebbles added!`);
+      await showRemainingCredits();
     } catch (err: unknown) {
-      toast.error(`Gagal: ${err instanceof Error ? err.message : 'Error'}`);
+      const msg = err instanceof Error ? err.message : 'Error';
+      handleCreditError(msg);
+      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Failed: ${msg}`);
     } finally {
       setIsAdding(false);
     }
@@ -144,7 +180,6 @@ const SortableBoulder = ({
               <Hammer size={11} className={isHammering ? 'animate-bounce' : ''} />
               {isHammering ? 'Hammering…' : 'Hammer'}
             </button>
-
             {boulder.pebbles.length > 0 && (
               <button onClick={() => setShowRefineInput(!showRefineInput)}
                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors">
@@ -152,7 +187,6 @@ const SortableBoulder = ({
                 Refine
               </button>
             )}
-
             {boulder.pebbles.length > 0 && (
               <button onClick={addMorePebbles} disabled={isAdding}
                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-body text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-md transition-colors disabled:opacity-50">
@@ -160,16 +194,15 @@ const SortableBoulder = ({
                 {isAdding ? 'Adding…' : 'More'}
               </button>
             )}
-
             <ConfirmDialog
               trigger={
                 <button className="text-muted-foreground hover:text-destructive transition-colors p-1 ml-auto">
                   <Trash2 size={12} />
                 </button>
               }
-              title="Hapus boulder?"
-              description={`"${boulder.title}" dan semua pebble-nya akan dihapus permanen.`}
-              confirmLabel="Hapus"
+              title="Delete boulder?"
+              description={`"${boulder.title}" and all its pebbles will be permanently removed.`}
+              confirmLabel="Delete"
               onConfirm={onDeleteBoulder}
             />
           </div>
@@ -179,7 +212,7 @@ const SortableBoulder = ({
       {showRefineInput && (
         <div className="mb-3 flex gap-2">
           <input type="text" value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)}
-            placeholder="e.g. 'lebih teknikal', 'fokus ke desain'…"
+            placeholder="e.g. 'more technical', 'focus on design'…"
             className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
             onKeyDown={(e) => e.key === 'Enter' && refinePebbles()} autoFocus />
           <button onClick={refinePebbles} disabled={isRefining || !refinePrompt.trim()}
@@ -209,6 +242,7 @@ const SortableBoulder = ({
                 onUpdatePebble={(updates) => onUpdatePebble(pebble.id, updates)}
                 onFocusMode={onFocusPebble ? () => onFocusPebble(focusedPebbleId === pebble.id ? null : pebble.id) : undefined}
                 isFocused={focusedPebbleId === pebble.id}
+                onInsufficientCredits={onInsufficientCredits}
               />
             ))}
           </div>
@@ -218,7 +252,7 @@ const SortableBoulder = ({
       {!readOnly && (
         <form onSubmit={(e) => { e.preventDefault(); onAddPebble(); }} className="mt-3 flex gap-2">
           <input type="text" value={newPebbleText} onChange={(e) => onNewPebbleTextChange(e.target.value)}
-            placeholder="Tambah pebble…"
+            placeholder="Add a pebble…"
             className="flex-1 min-w-0 px-3 py-1.5 text-sm bg-background border border-border rounded-md font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
           <button type="submit" className="px-3 py-1.5 text-sm font-body bg-secondary text-secondary-foreground rounded-md hover:opacity-80 shrink-0">
             <Plus size={14} />

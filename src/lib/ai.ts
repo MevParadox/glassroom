@@ -1,20 +1,35 @@
 /**
  * Centralized AI helper — Groq (Llama 3.3 70B)
- * Ganti API key di .env: VITE_GROQ_API_KEY=gsk_xxxxxxxx
+ * With credit system integration via Supabase
  */
+
+import { supabase } from './supabase';
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// ─── Credit costs per action ──────────────────────────────
+export const CREDIT_COSTS = {
+  AUTO_HAMMER: 10,
+  HAMMER_BOULDER: 3,
+  REFINE: 2,
+  MORE_PEBBLES: 1,
+  ANSWER: 3,
+  FORGE_NARRATIVE: 15,
+  FORGE_STRUCTURED: 0,
+} as const;
+
+export type CreditAction = keyof typeof CREDIT_COSTS;
 
 interface CallAIOptions {
   temperature?: number;
   maxTokens?: number;
 }
 
-// ─── General text completion ──────────────────────────────
+// ─── Raw AI call (no credit check) ───────────────────────
 export async function callAI(prompt: string, options: CallAIOptions = {}): Promise<string> {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-  if (!apiKey) throw new Error('VITE_GROQ_API_KEY tidak ditemukan di .env');
+  if (!apiKey) throw new Error('VITE_GROQ_API_KEY not found in .env');
 
   const response = await fetch(GROQ_URL, {
     method: 'POST',
@@ -39,15 +54,61 @@ export async function callAI(prompt: string, options: CallAIOptions = {}): Promi
   return data.choices?.[0]?.message?.content || '';
 }
 
+// ─── AI call WITH credit check & deduct ──────────────────
+export async function callAIWithCredit(
+  prompt: string,
+  action: CreditAction,
+  options: CallAIOptions = {}
+): Promise<string> {
+  const cost = CREDIT_COSTS[action];
+
+  // Free actions skip credit check
+  if (cost > 0) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Deduct credits
+    const { data, error } = await supabase.rpc('deduct_credits', {
+      p_user_id: user.id,
+      p_amount: cost,
+      p_action: action.toLowerCase(),
+      p_description: action,
+    });
+
+    if (error) throw new Error('Failed to process credits');
+    if (!data.success) {
+      throw new Error(`INSUFFICIENT_CREDITS:${data.credits ?? 0}`);
+    }
+  }
+
+  return callAI(prompt, options);
+}
+
+// ─── Get current credits ──────────────────────────────────
+export async function getUserCredits(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  // Initialize if new user
+  await supabase.rpc('initialize_user_credits', { p_user_id: user.id });
+
+  const { data } = await supabase
+    .from('user_credits')
+    .select('credits')
+    .eq('user_id', user.id)
+    .single();
+
+  return data?.credits ?? 0;
+}
+
 // ─── Parse JSON array dari response AI ───────────────────
 export function parseJsonArray(raw: string): string[] {
   const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('Tidak ada JSON array ditemukan di response');
+  if (!match) throw new Error('No JSON array found in response');
 
   try {
     return JSON.parse(match[0]);
   } catch {
-    // Fallback: extract teks per baris kalau JSON invalid
     return match[0]
       .replace(/[\[\]]/g, '')
       .split('\n')
@@ -64,41 +125,49 @@ export function buildAnswerPrompt(
   pebbleText: string,
   contextSection: string
 ): string {
-  return `Kamu adalah asisten yang memberikan jawaban langsung dan praktis. Pengguna sedang mengerjakan sebuah project dan butuh jawaban KONKRET untuk task berikut.
+  return `You are a practical assistant that answers directly like a smart friend — not a consultant writing a report.
 
 Project: "${spark}"
-Fase saat ini: "${boulderTitle}"
+Phase: "${boulderTitle}"
 Task: "${pebbleText}"
 ${contextSection}
-ATURAN KETAT:
-1. Jawab HANYA apa yang ditanyakan di task. Jangan tambah topik lain yang tidak diminta.
-2. JANGAN mengarang data, statistik, atau hasil riset. Kalau tidak punya data spesifik, gunakan "secara umum..." atau "berdasarkan tren yang ada...".
-3. JANGAN beri framework atau cara berpikir — langsung kasih jawabannya.
-4. Maksimal 5-7 poin kecuali task memang membutuhkan output panjang (misal: script, rencana lengkap).
-5. Kalau task ambigu, jawab dengan asumsi paling masuk akal dan sebutkan asumsinya.
-6. Tulis seperti teman pintar yang kasih catatan cepat, BUKAN konsultan yang bikin laporan.
-7. Setiap poin maksimal 8-10 kata. Padat. Scannable. Tanpa basa-basi.
-8. Hindari kalimat pembuka seperti "Tentu saja...", "Berikut adalah...", "Sebagai asisten...".
+RULES:
+1. Answer ONLY what is asked. Don't add unrelated topics.
+2. NEVER fabricate data or statistics. If you don't have specific data:
+   - For references/sources → give search keywords and platforms, not fake names
+   - For numbers → use "generally..." or rough estimates with disclaimer
+   - For specific facts → acknowledge limitation and suggest how to find it
+3. Match length to task type:
+   - Factual/list tasks → 5-7 short punchy points
+   - Creative/conceptual tasks → 1-2 sentences per point, stay focused
+   - Technical tasks → detail as needed, nothing more
+4. Write like a smart friend giving quick notes, NOT a consultant writing a report.
+5. Avoid openers: "Sure!", "Here is...", "As an assistant...".
+6. If task needs action (search, buy, contact) → give actionable guidance, not placeholders.
 
 FORMAT:
-- Mulai dengan 1 kalimat summary singkat dibungkus <p><strong>...</strong></p>
-- Gunakan <ul><li> untuk poin-poin — setiap li maksimal 10 kata
-- Format poin: <li><strong>Label singkat</strong> — penjelasan pendek</li>
-- Gunakan bahasa yang sama dengan task
-- HTML bersih tanpa code fences
+- 1 sentence summary wrapped in <p><strong>...</strong></p>
+- Details using <ul><li> or <ol><li>
+- Format: <li><strong>Label</strong> — short explanation</li>
+- Use same language as the task
+- Clean HTML, no code fences
 
-CONTOH BENAR untuk task "Tentukan target user aplikasi Fix My Landing Page":
-<p><strong>Pemilik bisnis kecil & freelancer yang landing page-nya tidak convert.</strong></p>
+EXAMPLE for "Determine target users for Fix My Landing Page app":
+<p><strong>Small business owners & freelancers whose landing pages don't convert.</strong></p>
 <ul>
-<li><strong>Freelancer/solopreneur</strong> — jual jasa digital, ga punya budget agensi</li>
-<li><strong>UMKM baru online</strong> — bikin landing page sendiri, hasilnya kurang optimal</li>
-<li><strong>Startup early-stage</strong> — butuh feedback cepat sebelum scale</li>
+<li><strong>Freelancers/solopreneurs</strong> — sell digital services, no agency budget</li>
+<li><strong>New online SMBs</strong> — built their own landing page, results suboptimal</li>
+<li><strong>Early-stage startups</strong> — need quick feedback before scaling</li>
 </ul>
 
-CONTOH SALAH (jangan lakukan ini):
-- Mengarang "riset menunjukkan bahwa 80% UMKM mengalami..."
-- Menjawab soal kompetitor padahal task hanya tanya target user
-- Memberi framework "untuk menentukan target user, pertimbangkan..."`;
+EXAMPLE for "Collect academic journal references":
+<p><strong>Search Google Scholar and PubMed with these specific keywords.</strong></p>
+<ul>
+<li><strong>Search keywords</strong> — "cognitive overload", "ADHD executive function", "mind wandering", "mental noise"</li>
+<li><strong>Google Scholar</strong> — scholar.google.com, filter by year 2018-present</li>
+<li><strong>PubMed</strong> — pubmed.ncbi.nlm.nih.gov, free and peer-reviewed</li>
+<li><strong>Frontiers in Psychology</strong> — open access, many cognitive flexibility articles</li>
+</ul>`;
 }
 
 export function buildHammerPrompt(spark: string, boulderTitle: string): string {
@@ -124,7 +193,7 @@ IMPORTANT RULES:
 - Tailor EVERYTHING specifically to this project idea
 - Phase titles must reflect actual stages of THIS specific project
 - Tasks must be concrete actions for THIS project
-- No generic tasks like "Research existing solutions" unless truly relevant
+- No generic tasks unless truly relevant
 - Use the same language as the project idea
 - Be specific: instead of "Build core features", say what the actual feature is
 

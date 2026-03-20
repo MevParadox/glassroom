@@ -25,32 +25,23 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // ✅ Manual auth — ambil token dari header
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader) {
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-
-    // ✅ Init Supabase dengan service role untuk verify user
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    );
-
-    // ✅ Verify JWT dan get user
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
-    }
-
-    // ✅ Supabase client dengan context user
+    // ✅ Use anon client with user's token — standard Supabase pattern
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
+
+    // ✅ Verify user via their own token
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    }
 
     // Parse request
     const { messages, action, options = {} } = await req.json();
@@ -60,9 +51,9 @@ Deno.serve(async (req: Request) => {
 
     const cost = CREDIT_COSTS[action] ?? 0;
 
-    // ✅ Check credits sebelum call AI
+    // ✅ Check credits
     if (cost > 0) {
-      const { data: creditData } = await supabaseAdmin
+      const { data: creditData } = await supabase
         .from('user_credits')
         .select('credits')
         .eq('user_id', user.id)
@@ -76,7 +67,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ✅ Call Groq — key aman di server
+    // ✅ Call Groq
     const groqBody: Record<string, unknown> = {
       model: GROQ_MODEL,
       messages,
@@ -105,9 +96,9 @@ Deno.serve(async (req: Request) => {
     const groqData = await groqRes.json();
     const content = groqData.choices?.[0]?.message?.content || '';
 
-    // ✅ Deduct credits AFTER successful AI call
+    // ✅ Deduct credits AFTER success
     if (cost > 0) {
-      const { data: deductResult } = await supabaseAdmin.rpc('deduct_credits', {
+      const { data: deductResult } = await supabase.rpc('deduct_credits', {
         p_user_id: user.id,
         p_amount: cost,
         p_action: action.toLowerCase(),

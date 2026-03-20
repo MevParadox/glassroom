@@ -301,7 +301,7 @@ const Index = () => {
               <button onClick={() => setShowTopUp(true)} title="Click to top up credits"
                 className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded-lg border transition-colors whitespace-nowrap ${creditColor}`}>
                 <Zap size={10} />
-                {credits} cr
+                {credits} ◆
               </button>
             )}
 
@@ -325,12 +325,12 @@ const Index = () => {
                   >
                     <div className="px-4 py-3 border-b border-border">
                       <p className="text-xs font-body text-muted-foreground truncate">{userEmail}</p>
-                      <p className="text-xs font-body text-primary mt-0.5">{credits ?? 0} credits remaining</p>
+                      <p className="text-xs font-body text-primary mt-0.5">{credits ?? 0} Shards remaining</p>
                     </div>
                     <button onClick={() => { setShowTopUp(true); setShowDropdown(false); }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left">
                       <Zap size={14} className="text-primary" />
-                      Top Up Credits
+                      Top Up Shards
                     </button>
                     <button onClick={() => { toggleDark(); setShowDropdown(false); }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left">

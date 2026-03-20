@@ -1,14 +1,9 @@
 /**
- * Centralized AI helper — Groq (Llama 3.3 70B)
- * - System/User prompt separation
- * - JSON mode for structured outputs
- * - Credit deducted AFTER successful AI call
+ * Centralized AI helper — via Supabase Edge Function (ai-proxy)
+ * Groq API key is safe on server side, never exposed to client
  */
 
 import { supabase } from './supabase';
-
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // ─── Credit costs per action ──────────────────────────────
 export const CREDIT_COSTS = {
@@ -26,7 +21,7 @@ export type CreditAction = keyof typeof CREDIT_COSTS;
 interface CallAIOptions {
   temperature?: number;
   maxTokens?: number;
-  jsonMode?: boolean; // ✅ JSON mode for structured outputs
+  jsonMode?: boolean;
 }
 
 interface Message {
@@ -34,94 +29,82 @@ interface Message {
   content: string;
 }
 
-// ─── Raw AI call ──────────────────────────────────────────
+// ─── Call AI via Edge Function ────────────────────────────
 export async function callAI(
   messages: Message[] | string,
   options: CallAIOptions = {}
 ): Promise<string> {
-  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-  if (!apiKey) throw new Error('VITE_GROQ_API_KEY not found in .env');
-
-  // Support string shorthand (single user message)
   const normalizedMessages: Message[] = typeof messages === 'string'
     ? [{ role: 'user', content: messages }]
     : messages;
 
-  const body: Record<string, unknown> = {
-    model: GROQ_MODEL,
-    messages: normalizedMessages,
-    temperature: options.temperature ?? 0.5,
-    max_tokens: options.maxTokens ?? 8192,
-  };
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
 
-  // ✅ JSON mode — guarantees valid JSON output
-  if (options.jsonMode) {
-    body.response_format = { type: 'json_object' };
-  }
+  const functionsUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
+  if (!functionsUrl) throw new Error('VITE_SUPABASE_FUNCTIONS_URL not found in .env');
 
-  const response = await fetch(GROQ_URL, {
+  const response = await fetch(`${functionsUrl}/ai-proxy`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      messages: normalizedMessages,
+      action: 'NONE', // no credit deduction for raw callAI
+      options,
+    }),
   });
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err?.error?.message || `Groq API error: ${response.status}`);
+    throw new Error(err?.error || `Edge Function error: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  return data.content || '';
 }
 
-// ─── AI call WITH credit check & deduct AFTER success ─────
+// ─── Call AI with credit deduction ───────────────────────
 export async function callAIWithCredit(
   messages: Message[] | string,
   action: CreditAction,
   options: CallAIOptions = {}
 ): Promise<string> {
-  const cost = CREDIT_COSTS[action];
+  const normalizedMessages: Message[] = typeof messages === 'string'
+    ? [{ role: 'user', content: messages }]
+    : messages;
 
-  // ✅ Check credits BEFORE calling AI (to avoid unnecessary API calls)
-  if (cost > 0) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
 
-    const { data: creditData } = await supabase
-      .from('user_credits')
-      .select('credits')
-      .eq('user_id', user.id)
-      .single();
+  const functionsUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
+  if (!functionsUrl) throw new Error('VITE_SUPABASE_FUNCTIONS_URL not found in .env');
 
-    if (!creditData || creditData.credits < cost) {
-      throw new Error(`INSUFFICIENT_CREDITS:${creditData?.credits ?? 0}`);
+  const response = await fetch(`${functionsUrl}/ai-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      messages: normalizedMessages,
+      action,
+      options,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    if (data?.error === 'INSUFFICIENT_CREDITS') {
+      throw new Error(`INSUFFICIENT_CREDITS:${data.credits ?? 0}`);
     }
+    throw new Error(data?.error || `Edge Function error: ${response.status}`);
   }
 
-  // ✅ Call AI first
-  const result = await callAI(messages, options);
-
-  // ✅ Deduct credits AFTER success
-  if (cost > 0) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase.rpc('deduct_credits', {
-      p_user_id: user.id,
-      p_amount: cost,
-      p_action: action.toLowerCase(),
-      p_description: action,
-    });
-
-    if (error || !data?.success) {
-      console.error('Credit deduction failed after successful AI call:', error);
-    }
-  }
-
-  return result;
+  return data.content || '';
 }
 
 // ─── Get current user credits ─────────────────────────────
@@ -140,7 +123,7 @@ export async function getUserCredits(): Promise<number> {
   return data?.credits ?? 0;
 }
 
-// ─── Parse JSON array (fallback for non-JSON-mode calls) ──
+// ─── Parse JSON array (fallback) ─────────────────────────
 export function parseJsonArray(raw: string): string[] {
   const match = raw.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('No JSON array found in response');
@@ -186,7 +169,7 @@ FORMAT:
 - Details using <ul><li> or <ol><li>
 - Format: <li><strong>Label</strong> — short explanation</li>
 - Use same language as the task
-- Clean HTML, no code fences, no markdown`,
+- Clean HTML, no code fences`,
     },
     {
       role: 'user',
@@ -203,7 +186,7 @@ export function buildHammerMessages(spark: string, boulderTitle: string): Messag
     {
       role: 'system',
       content: `You are a project planning assistant. Generate specific, actionable tasks for a project phase.
-Return ONLY a valid JSON object with a "tasks" array: {"tasks": ["Task 1", "Task 2"]}
+Return ONLY a valid JSON object: {"tasks": ["Task 1", "Task 2"]}
 Rules:
 - 3 to 5 tasks
 - Specific to project and phase
@@ -223,21 +206,15 @@ export function buildAutoHammerMessages(spark: string): Message[] {
       role: 'system',
       content: `You are an expert project planner. Break down project ideas into phases with specific tasks.
 Return ONLY this exact JSON structure:
-{
-  "phases": [
-    {
-      "title": "Phase name",
-      "pebbles": ["Task 1", "Task 2", "Task 3"]
-    }
-  ]
-}
+{"phases": [{"title": "Phase name", "pebbles": ["Task 1", "Task 2", "Task 3"]}]}
 
 CRITICAL: Every phase MUST have a "pebbles" array with 2-4 specific tasks.
 Rules:
 - 3 to 5 phases
 - 2 to 4 tasks per phase — THIS IS MANDATORY, never leave pebbles empty
 - Tailor everything to the specific project
-- Use same language as project idea`,
+- Use same language as project idea
+- Be specific, not generic`,
     },
     {
       role: 'user',

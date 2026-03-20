@@ -3,49 +3,48 @@ import { Hammer } from 'lucide-react';
 import { Boulder, Pebble } from '@/lib/types';
 import { generateId } from '@/lib/store';
 import { toast } from 'sonner';
-import { callAIWithCredit, parseJsonArray, buildAutoHammerPrompt, getUserCredits } from '@/lib/ai';
+import { callAIWithCredit, buildAutoHammerMessages, getUserCredits } from '@/lib/ai';
 
 interface AutoHammerProps {
   spark: string;
   onGenerated: (boulders: Boulder[]) => void;
   onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
-const AutoHammer = ({ spark, onGenerated, onInsufficientCredits }: AutoHammerProps) => {
+const AutoHammer = ({ spark, onGenerated, onInsufficientCredits, onCreditsChanged }: AutoHammerProps) => {
   const [isHammering, setIsHammering] = useState(false);
 
   const hammer = async () => {
     setIsHammering(true);
     try {
       const raw = await callAIWithCredit(
-        buildAutoHammerPrompt(spark),
+        buildAutoHammerMessages(spark),
         'AUTO_HAMMER',
-        { temperature: 0.7, maxTokens: 2000 }
+        { temperature: 0.7, maxTokens: 2000, jsonMode: true }
       );
 
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (!match) throw new Error('Invalid response format');
-      const parsed = JSON.parse(match[0]);
+      // ✅ JSON mode guarantees valid JSON — just parse directly
+      const parsed = JSON.parse(raw);
+      const phases = parsed.phases || parsed; // handle both formats
 
-      const boulders: Boulder[] = parsed.map((phase: { title: string; pebbles: string[] }) => ({
+      const boulders: Boulder[] = phases.map((phase: { title: string; pebbles: string[] }) => ({
         id: generateId(),
         title: phase.title,
-        pebbles: phase.pebbles.map((text: string) => ({
+        pebbles: (phase.pebbles || []).map((text: string) => ({
           id: generateId(), text, status: 'todo' as Pebble['status'],
         })),
       }));
 
       onGenerated(boulders);
       toast.success('Boulders & pebbles generated! ✨');
-
-      const remaining = await getUserCredits();
-      toast(`${remaining} credits remaining`, { duration: 2000 });
+      onCreditsChanged?.(); // ✅ refresh credit badge
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error';
       if (message.startsWith('INSUFFICIENT_CREDITS')) {
         const remaining = message.split(':')[1] || '0';
-        toast.error(`Not enough credits (${remaining} left). Top up to continue.`);
+        toast.error(`Not enough credits (${remaining} left).`);
         onInsufficientCredits?.();
       } else {
         toast.error(`Auto Hammer failed: ${message}`);

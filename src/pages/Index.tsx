@@ -262,11 +262,17 @@ const Index = () => {
 
   const avatarInitial = userEmail ? userEmail[0].toUpperCase() : '?';
 
+   // Tambah fungsi ini (sudah ada refreshCredits)
+  const handleCreditsChanged = useCallback(() => {
+    refreshCredits();
+  }, [refreshCredits]);
+
   const creditColor = credits === null ? '' :
     credits === 0 ? 'text-destructive bg-destructive/10 border-destructive/30' :
     credits < 10 ? 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950 dark:border-orange-800' :
     'text-primary bg-primary/10 border-primary/20';
 
+ 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -406,10 +412,17 @@ const Index = () => {
               onBankruptcy={handleBankruptcy} onFreeze={handleFreezeIdea} searchQuery={searchQuery} />
           )}
           {activeTab === 'workshop' && (
-            <WorkshopView projects={projects} onUpdateProject={handleUpdateProject}
-              onArchiveProject={handleArchiveProject} onCreateProject={handleCreateProject}
-              onDeleteProject={handleDeleteProject} onFreezeProject={handleFreezeProject}
-              searchQuery={searchQuery} />
+            <WorkshopView
+              projects={projects}
+              onUpdateProject={handleUpdateProject}
+              onArchiveProject={handleArchiveProject}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onFreezeProject={handleFreezeProject}
+              searchQuery={searchQuery}
+              onInsufficientCredits={() => setShowTopUp(true)}
+              onCreditsChanged={handleCreditsChanged}
+            />
           )}
           {activeTab === 'anvil' && (
             <AnvilView projects={projects} onUpdatePebble={handleAnvilUpdatePebble}

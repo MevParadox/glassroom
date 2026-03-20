@@ -16,6 +16,7 @@ interface ProjectDetailProps {
   onArchive: () => void;
   readOnly?: boolean;
   onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
 const nextStatus: Record<Pebble['status'], Pebble['status']> = {
@@ -24,7 +25,7 @@ const nextStatus: Record<Pebble['status'], Pebble['status']> = {
   'done': 'todo',
 };
 
-const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly, onInsufficientCredits }: ProjectDetailProps) => {
+const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly, onInsufficientCredits, onCreditsChanged }: ProjectDetailProps) => {
   const [newBoulderTitle, setNewBoulderTitle] = useState('');
   const [newPebbleTexts, setNewPebbleTexts] = useState<Record<string, string>>({});
   const [editingSpark, setEditingSpark] = useState(false);
@@ -200,6 +201,7 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly, onInsuf
                 spark={project.spark}
                 onGenerated={(boulders) => onUpdate({ ...project, boulders })}
                 onInsufficientCredits={onInsufficientCredits}
+                onCreditsChanged={onCreditsChanged}
               />
             </div>
           )}
@@ -242,6 +244,7 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly, onInsuf
                 onFocusPebble={setFocusedPebbleId}
                 focusedPebbleId={focusedPebbleId}
                 onInsufficientCredits={onInsufficientCredits}
+                onCreditsChanged={onCreditsChanged}
               />
             ))}
           </div>
@@ -260,7 +263,14 @@ const ProjectDetail = ({ project, onBack, onUpdate, onArchive, readOnly, onInsuf
         </form>
       )}
 
-      {showForge && <ForgeModal project={project} onClose={() => setShowForge(false)} />}
+      {showForge && (
+        <ForgeModal
+          project={project}
+          onClose={() => setShowForge(false)}
+          onInsufficientCredits={onInsufficientCredits}
+          onCreditsChanged={onCreditsChanged}
+        />
+      )}
     </div>
   );
 };

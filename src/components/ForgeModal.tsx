@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Project } from '@/lib/types';
 import { X, Sparkles, List, Loader2, Download, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { callAI } from '@/lib/ai';
+import { callAIWithCredit, buildForgeMessages } from '@/lib/ai';
 
 interface ForgeModalProps {
   project: Project;
   onClose: () => void;
+  onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
 type ForgeMode = 'narrative' | 'structured' | null;
@@ -71,7 +73,7 @@ function printAsPDF(title: string, htmlContent: string) {
 }
 
 function buildStructuredHTML(project: Project): string {
-  const date = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const date = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
   let html = `<h1>${project.spark}</h1><p class="meta">Created on ${date} · The Glass Room</p><hr class="divider">`;
 
   project.boulders.forEach((boulder, bIdx) => {
@@ -89,7 +91,7 @@ function buildStructuredHTML(project: Project): string {
   return html;
 }
 
-const ForgeModal = ({ project, onClose }: ForgeModalProps) => {
+const ForgeModal = ({ project, onClose, onInsufficientCredits, onCreditsChanged }: ForgeModalProps) => {
   const [mode, setMode] = useState<ForgeMode>(null);
   const [isForging, setIsForging] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -106,28 +108,25 @@ const ForgeModal = ({ project, onClose }: ForgeModalProps) => {
         return `### ${b.title}\n${pebbleContext}`;
       }).join('\n\n');
 
-      const prompt = `You are a professional document writer. Based on the project planning data below, craft a cohesive, flowing narrative document.
+      // ✅ Use callAIWithCredit — deducts 15 credits
+      const html = await callAIWithCredit(
+        buildForgeMessages(project.spark, context),
+        'FORGE_NARRATIVE',
+        { temperature: 0.7, maxTokens: 8192 }
+      );
 
-Project: "${project.spark}"
-
-Planning data:
-${context}
-
-Write a professional document that:
-1. Starts with an executive summary / introduction paragraph
-2. Flows naturally from phase to phase
-3. Integrates the answers and details into readable prose
-4. Ends with a conclusion or next steps
-
-Use the same language as the project title.
-Format in clean HTML using: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <strong>, <em>
-Do NOT use code fences. Raw HTML only.
-Make it feel like a real document, not a list dump.`;
-
-      const html = await callAI(prompt, { temperature: 0.7, maxTokens: 8192 });
       setResult(html.replace(/```html|```/g, '').trim());
+      onCreditsChanged?.();
     } catch (err: unknown) {
-      toast.error(`Forge gagal: ${err instanceof Error ? err.message : 'Error'}`);
+      const message = err instanceof Error ? err.message : 'Error';
+      if (message.startsWith('INSUFFICIENT_CREDITS')) {
+        const remaining = message.split(':')[1] || '0';
+        toast.error(`Not enough credits (${remaining} left).`);
+        onClose();
+        onInsufficientCredits?.();
+      } else {
+        toast.error(`Forge failed: ${message}`);
+      }
     } finally {
       setIsForging(false);
     }
@@ -140,7 +139,7 @@ Make it feel like a real document, not a list dump.`;
 
   const handleExport = () => {
     if (!result) return;
-    const date = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const date = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
     printAsPDF(`${project.spark} — ${date}`, result);
   };
 
@@ -171,7 +170,7 @@ Make it feel like a real document, not a list dump.`;
                     <Sparkles size={18} className="text-primary shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-body font-semibold text-foreground">Narrative — AI Craft</p>
-                      <p className="text-xs font-body text-muted-foreground mt-0.5">AI merges all planning into a cohesive, flowing document</p>
+                      <p className="text-xs font-body text-muted-foreground mt-0.5">AI merges all planning into a cohesive, flowing document · 15 credits</p>
                     </div>
                   </div>
                 </button>
@@ -182,7 +181,7 @@ Make it feel like a real document, not a list dump.`;
                     <List size={18} className="text-primary shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-body font-semibold text-foreground">Structured — Export As Is</p>
-                      <p className="text-xs font-body text-muted-foreground mt-0.5">Export all boulders, pebbles, and answers in a structured format</p>
+                      <p className="text-xs font-body text-muted-foreground mt-0.5">Export all boulders, pebbles, and answers · Free</p>
                     </div>
                   </div>
                 </button>

@@ -9,7 +9,7 @@ import SortablePebble from './SortablePebble';
 import ConfirmDialog from './ConfirmDialog';
 import { generateId } from '@/lib/store';
 import { toast } from 'sonner';
-import { callAIWithCredit, parseJsonArray, buildHammerPrompt, buildRefinePrompt, buildMorePebblesPrompt, getUserCredits } from '@/lib/ai';
+import { callAIWithCredit, buildHammerMessages, buildRefineMessages, buildMorePebblesMessages } from '@/lib/ai';
 
 interface SortableBoulderProps {
   boulder: Boulder;
@@ -31,13 +31,14 @@ interface SortableBoulderProps {
   onFocusPebble?: (pebbleId: string | null) => void;
   focusedPebbleId?: string | null;
   onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
 const SortableBoulder = ({
   boulder, spark, readOnly, newPebbleText, onNewPebbleTextChange,
   onAddPebble, onDeleteBoulder, onEditBoulder, onTogglePebble, onDeletePebble, onEditPebble,
   onUpdatePebble, onReorderPebbles, onReplacePebbles, onAddPebbles, hidden, onFocusPebble,
-  focusedPebbleId, onInsufficientCredits,
+  focusedPebbleId, onInsufficientCredits, onCreditsChanged,
 }: SortableBoulderProps) => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleText, setTitleText] = useState(boulder.title);
@@ -54,33 +55,30 @@ const SortableBoulder = ({
   const handleCreditError = (message: string) => {
     if (message.startsWith('INSUFFICIENT_CREDITS')) {
       const remaining = message.split(':')[1] || '0';
-      toast.error(`Not enough credits (${remaining} left). Top up to continue.`);
+      toast.error(`Not enough credits (${remaining} left).`);
       onInsufficientCredits?.();
+      return true;
     }
-  };
-
-  const showRemainingCredits = async () => {
-    const remaining = await getUserCredits();
-    toast(`${remaining} credits remaining`, { duration: 2000 });
+    return false;
   };
 
   const hammerBoulder = async () => {
     setIsHammering(true);
     try {
       const raw = await callAIWithCredit(
-        buildHammerPrompt(spark, boulder.title),
+        buildHammerMessages(spark, boulder.title),
         'HAMMER_BOULDER',
-        { temperature: 0.7, maxTokens: 2000 }
+        { temperature: 0.7, maxTokens: 2000, jsonMode: true }
       );
-      const tasks = parseJsonArray(raw);
+      const parsed = JSON.parse(raw);
+      const tasks: string[] = parsed.tasks || parsed;
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
       toast.success('Pebbles generated!');
-      await showRemainingCredits();
+      onCreditsChanged?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error';
-      handleCreditError(msg);
-      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Hammer failed: ${msg}`);
+      if (!handleCreditError(msg)) toast.error(`Hammer failed: ${msg}`);
     } finally {
       setIsHammering(false);
     }
@@ -92,21 +90,21 @@ const SortableBoulder = ({
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
       const raw = await callAIWithCredit(
-        buildRefinePrompt(spark, boulder.title, existingTasks, refinePrompt),
+        buildRefineMessages(spark, boulder.title, existingTasks, refinePrompt),
         'REFINE',
-        { temperature: 0.7, maxTokens: 2000 }
+        { temperature: 0.7, maxTokens: 2000, jsonMode: true }
       );
-      const tasks = parseJsonArray(raw);
+      const parsed = JSON.parse(raw);
+      const tasks: string[] = parsed.tasks || parsed;
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onReplacePebbles(boulder.id, pebbles);
       setRefinePrompt('');
       setShowRefineInput(false);
       toast.success('Pebbles refined!');
-      await showRemainingCredits();
+      onCreditsChanged?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error';
-      handleCreditError(msg);
-      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Refine failed: ${msg}`);
+      if (!handleCreditError(msg)) toast.error(`Refine failed: ${msg}`);
     } finally {
       setIsRefining(false);
     }
@@ -117,19 +115,19 @@ const SortableBoulder = ({
     try {
       const existingTasks = boulder.pebbles.map(p => p.text).join('\n');
       const raw = await callAIWithCredit(
-        buildMorePebblesPrompt(spark, boulder.title, existingTasks),
+        buildMorePebblesMessages(spark, boulder.title, existingTasks),
         'MORE_PEBBLES',
-        { temperature: 0.7, maxTokens: 2000 }
+        { temperature: 0.7, maxTokens: 2000, jsonMode: true }
       );
-      const tasks = parseJsonArray(raw);
+      const parsed = JSON.parse(raw);
+      const tasks: string[] = parsed.tasks || parsed;
       const pebbles: Pebble[] = tasks.map((text: string) => ({ id: generateId(), text, status: 'todo' as Pebble['status'] }));
       onAddPebbles(boulder.id, pebbles);
       toast.success(`${pebbles.length} pebbles added!`);
-      await showRemainingCredits();
+      onCreditsChanged?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error';
-      handleCreditError(msg);
-      if (!msg.startsWith('INSUFFICIENT_CREDITS')) toast.error(`Failed: ${msg}`);
+      if (!handleCreditError(msg)) toast.error(`Failed: ${msg}`);
     } finally {
       setIsAdding(false);
     }
@@ -243,6 +241,7 @@ const SortableBoulder = ({
                 onFocusMode={onFocusPebble ? () => onFocusPebble(focusedPebbleId === pebble.id ? null : pebble.id) : undefined}
                 isFocused={focusedPebbleId === pebble.id}
                 onInsufficientCredits={onInsufficientCredits}
+                onCreditsChanged={onCreditsChanged}
               />
             ))}
           </div>

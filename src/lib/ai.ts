@@ -1,6 +1,8 @@
 /**
  * Centralized AI helper — Groq (Llama 3.3 70B)
- * With credit system integration via Supabase
+ * - System/User prompt separation
+ * - JSON mode for structured outputs
+ * - Credit deducted AFTER successful AI call
  */
 
 import { supabase } from './supabase';
@@ -24,12 +26,38 @@ export type CreditAction = keyof typeof CREDIT_COSTS;
 interface CallAIOptions {
   temperature?: number;
   maxTokens?: number;
+  jsonMode?: boolean; // ✅ JSON mode for structured outputs
 }
 
-// ─── Raw AI call (no credit check) ───────────────────────
-export async function callAI(prompt: string, options: CallAIOptions = {}): Promise<string> {
+interface Message {
+  role: 'system' | 'user';
+  content: string;
+}
+
+// ─── Raw AI call ──────────────────────────────────────────
+export async function callAI(
+  messages: Message[] | string,
+  options: CallAIOptions = {}
+): Promise<string> {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   if (!apiKey) throw new Error('VITE_GROQ_API_KEY not found in .env');
+
+  // Support string shorthand (single user message)
+  const normalizedMessages: Message[] = typeof messages === 'string'
+    ? [{ role: 'user', content: messages }]
+    : messages;
+
+  const body: Record<string, unknown> = {
+    model: GROQ_MODEL,
+    messages: normalizedMessages,
+    temperature: options.temperature ?? 0.5,
+    max_tokens: options.maxTokens ?? 8192,
+  };
+
+  // ✅ JSON mode — guarantees valid JSON output
+  if (options.jsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
 
   const response = await fetch(GROQ_URL, {
     method: 'POST',
@@ -37,12 +65,7 @@ export async function callAI(prompt: string, options: CallAIOptions = {}): Promi
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: options.temperature ?? 0.5,
-      max_tokens: options.maxTokens ?? 8192,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -54,18 +77,34 @@ export async function callAI(prompt: string, options: CallAIOptions = {}): Promi
   return data.choices?.[0]?.message?.content || '';
 }
 
-// ─── AI call WITH credit check & deduct ──────────────────
+// ─── AI call WITH credit check & deduct AFTER success ─────
 export async function callAIWithCredit(
-  prompt: string,
+  messages: Message[] | string,
   action: CreditAction,
   options: CallAIOptions = {}
 ): Promise<string> {
   const cost = CREDIT_COSTS[action];
 
-  // ✅ Panggil AI DULU
-  const result = await callAI(prompt, options);
+  // ✅ Check credits BEFORE calling AI (to avoid unnecessary API calls)
+  if (cost > 0) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-  // ✅ Baru deduct credit kalau berhasil
+    const { data: creditData } = await supabase
+      .from('user_credits')
+      .select('credits')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!creditData || creditData.credits < cost) {
+      throw new Error(`INSUFFICIENT_CREDITS:${creditData?.credits ?? 0}`);
+    }
+  }
+
+  // ✅ Call AI first
+  const result = await callAI(messages, options);
+
+  // ✅ Deduct credits AFTER success
   if (cost > 0) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -77,21 +116,19 @@ export async function callAIWithCredit(
       p_description: action,
     });
 
-    if (error) throw new Error('Failed to process credits');
-    if (!data.success) {
-      throw new Error(`INSUFFICIENT_CREDITS:${data.credits ?? 0}`);
+    if (error || !data?.success) {
+      console.error('Credit deduction failed after successful AI call:', error);
     }
   }
 
   return result;
 }
 
-// ─── Get current credits ──────────────────────────────────
+// ─── Get current user credits ─────────────────────────────
 export async function getUserCredits(): Promise<number> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 0;
 
-  // Initialize if new user
   await supabase.rpc('initialize_user_credits', { p_user_id: user.id });
 
   const { data } = await supabase
@@ -103,11 +140,10 @@ export async function getUserCredits(): Promise<number> {
   return data?.credits ?? 0;
 }
 
-// ─── Parse JSON array dari response AI ───────────────────
+// ─── Parse JSON array (fallback for non-JSON-mode calls) ──
 export function parseJsonArray(raw: string): string[] {
   const match = raw.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('No JSON array found in response');
-
   try {
     return JSON.parse(match[0]);
   } catch {
@@ -119,112 +155,164 @@ export function parseJsonArray(raw: string): string[] {
   }
 }
 
-// ─── Prompt templates ─────────────────────────────────────
+// ─── Prompt builders ──────────────────────────────────────
 
-export function buildAnswerPrompt(
+export function buildAnswerMessages(
   spark: string,
   boulderTitle: string,
   pebbleText: string,
   contextSection: string
-): string {
-  return `You are a practical assistant that answers directly like a smart friend — not a consultant writing a report.
+): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are a practical assistant that answers directly like a smart friend — not a consultant writing a report.
 
-Project: "${spark}"
-Phase: "${boulderTitle}"
-Task: "${pebbleText}"
-${contextSection}
 RULES:
 1. Answer ONLY what is asked. Don't add unrelated topics.
 2. NEVER fabricate data or statistics. If you don't have specific data:
    - For references/sources → give search keywords and platforms, not fake names
    - For numbers → use "generally..." or rough estimates with disclaimer
-   - For specific facts → acknowledge limitation and suggest how to find it
 3. Match length to task type:
    - Factual/list tasks → 5-7 short punchy points
    - Creative/conceptual tasks → 1-2 sentences per point, stay focused
    - Technical tasks → detail as needed, nothing more
 4. Write like a smart friend giving quick notes, NOT a consultant writing a report.
 5. Avoid openers: "Sure!", "Here is...", "As an assistant...".
-6. If task needs action (search, buy, contact) → give actionable guidance, not placeholders.
+6. If task needs action → give actionable guidance, not placeholders.
 
 FORMAT:
 - 1 sentence summary wrapped in <p><strong>...</strong></p>
 - Details using <ul><li> or <ol><li>
 - Format: <li><strong>Label</strong> — short explanation</li>
 - Use same language as the task
-- Clean HTML, no code fences
-
-EXAMPLE for "Determine target users for Fix My Landing Page app":
-<p><strong>Small business owners & freelancers whose landing pages don't convert.</strong></p>
-<ul>
-<li><strong>Freelancers/solopreneurs</strong> — sell digital services, no agency budget</li>
-<li><strong>New online SMBs</strong> — built their own landing page, results suboptimal</li>
-<li><strong>Early-stage startups</strong> — need quick feedback before scaling</li>
-</ul>
-
-EXAMPLE for "Collect academic journal references":
-<p><strong>Search Google Scholar and PubMed with these specific keywords.</strong></p>
-<ul>
-<li><strong>Search keywords</strong> — "cognitive overload", "ADHD executive function", "mind wandering", "mental noise"</li>
-<li><strong>Google Scholar</strong> — scholar.google.com, filter by year 2018-present</li>
-<li><strong>PubMed</strong> — pubmed.ncbi.nlm.nih.gov, free and peer-reviewed</li>
-<li><strong>Frontiers in Psychology</strong> — open access, many cognitive flexibility articles</li>
-</ul>`;
+- Clean HTML, no code fences, no markdown`,
+    },
+    {
+      role: 'user',
+      content: `Project: "${spark}"
+Phase: "${boulderTitle}"
+Task: "${pebbleText}"
+${contextSection}`,
+    },
+  ];
 }
 
-export function buildHammerPrompt(spark: string, boulderTitle: string): string {
-  return `You are a project planning assistant.
-Project idea: "${spark}"
-Phase/Boulder: "${boulderTitle}"
-Generate specific, actionable tasks for this phase.
-Return ONLY a valid JSON array of task strings, no explanation, no markdown, no backticks:
-["Task 1", "Task 2", "Task 3"]
+export function buildHammerMessages(spark: string, boulderTitle: string): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are a project planning assistant. Generate specific, actionable tasks for a project phase.
+Return ONLY a valid JSON object with a "tasks" array: {"tasks": ["Task 1", "Task 2"]}
 Rules:
 - 3 to 5 tasks
 - Specific to project and phase
 - Use same language as project idea
-- No generic tasks`;
+- No generic tasks`,
+    },
+    {
+      role: 'user',
+      content: `Project: "${spark}"\nPhase: "${boulderTitle}"`,
+    },
+  ];
 }
 
-export function buildAutoHammerPrompt(spark: string): string {
-  return `You are an expert project planner. Break down this project idea into concrete, actionable phases and tasks.
+export function buildAutoHammerMessages(spark: string): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are an expert project planner. Break down project ideas into phases with specific tasks.
+Return ONLY this exact JSON structure:
+{
+  "phases": [
+    {
+      "title": "Phase name",
+      "pebbles": ["Task 1", "Task 2", "Task 3"]
+    }
+  ]
+}
 
-Project idea: "${spark}"
-
-IMPORTANT RULES:
-- Tailor EVERYTHING specifically to this project idea
-- Phase titles must reflect actual stages of THIS specific project
-- Tasks must be concrete actions for THIS project
-- No generic tasks unless truly relevant
-- Use the same language as the project idea
-- Be specific: instead of "Build core features", say what the actual feature is
-
-Return ONLY a valid JSON array, no explanation, no markdown, no backticks:
-[
-  {
-    "title": "Phase name specific to this project",
-    "pebbles": ["Specific task 1", "Specific task 2", "Specific task 3"]
-  }
-]
-
-Constraints:
+CRITICAL: Every phase MUST have a "pebbles" array with 2-4 specific tasks.
+Rules:
 - 3 to 5 phases
-- 2 to 4 tasks per phase
-- Every item must be directly relevant to: "${spark}"`;
+- 2 to 4 tasks per phase — THIS IS MANDATORY, never leave pebbles empty
+- Tailor everything to the specific project
+- Use same language as project idea`,
+    },
+    {
+      role: 'user',
+      content: `Project idea: "${spark}"`,
+    },
+  ];
 }
 
-export function buildRefinePrompt(spark: string, boulderTitle: string, existingTasks: string, feedback: string): string {
-  return `Project: "${spark}", Phase: "${boulderTitle}"
+export function buildRefineMessages(
+  spark: string,
+  boulderTitle: string,
+  existingTasks: string,
+  feedback: string
+): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are a project planning assistant. Revise task lists based on user feedback.
+Return ONLY a valid JSON object: {"tasks": ["Revised Task 1", "Revised Task 2"]}
+Use same language as the project idea.`,
+    },
+    {
+      role: 'user',
+      content: `Project: "${spark}", Phase: "${boulderTitle}"
 Current tasks:
 ${existingTasks}
-User feedback: "${feedback}"
-Revise tasks based on feedback. Return ONLY JSON array: ["Task 1", "Task 2"]
-Use same language as project idea.`;
+User feedback: "${feedback}"`,
+    },
+  ];
 }
 
-export function buildMorePebblesPrompt(spark: string, boulderTitle: string, existingTasks: string): string {
-  return `Project: "${spark}", Phase: "${boulderTitle}"
-Existing tasks (DO NOT repeat): ${existingTasks}
-Add 2-3 new complementary tasks. Return ONLY JSON array: ["New Task 1", "New Task 2"]
-Use same language as project idea.`;
+export function buildMorePebblesMessages(
+  spark: string,
+  boulderTitle: string,
+  existingTasks: string
+): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are a project planning assistant. Add complementary tasks to an existing task list.
+Return ONLY a valid JSON object: {"tasks": ["New Task 1", "New Task 2"]}
+DO NOT repeat existing tasks. Use same language as project idea.`,
+    },
+    {
+      role: 'user',
+      content: `Project: "${spark}", Phase: "${boulderTitle}"
+Existing tasks (DO NOT repeat):
+${existingTasks}
+Add 2-3 new complementary tasks.`,
+    },
+  ];
+}
+
+export function buildForgeMessages(spark: string, context: string): Message[] {
+  return [
+    {
+      role: 'system',
+      content: `You are a professional document writer. Transform project planning data into a cohesive narrative document.
+Format in clean HTML using: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <strong>, <em>
+No code fences. Raw HTML only.
+Make it feel like a real document, not a list dump.
+Use same language as the project title.`,
+    },
+    {
+      role: 'user',
+      content: `Project: "${spark}"
+
+Planning data:
+${context}
+
+Write a professional document that:
+1. Starts with an executive summary
+2. Flows naturally from phase to phase
+3. Integrates answers and details into readable prose
+4. Ends with conclusion or next steps`,
+    },
+  ];
 }

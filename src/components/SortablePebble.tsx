@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmDialog from './ConfirmDialog';
 import PebbleEditor from './PebbleEditor';
 import { toast } from 'sonner';
-import { callAIWithCredit, buildAnswerPrompt, getUserCredits } from '@/lib/ai';
+import { callAIWithCredit, buildAnswerMessages } from '@/lib/ai';
 
 const statusColors: Record<Pebble['status'], string> = {
   'todo': 'bg-muted text-muted-foreground',
@@ -34,9 +34,14 @@ interface SortablePebbleProps {
   onFocusMode?: () => void;
   isFocused?: boolean;
   onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
-const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly, onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused, onInsufficientCredits }: SortablePebbleProps) => {
+const SortablePebble = ({
+  pebble, spark, boulderTitle, boulderPebbles, readOnly,
+  onToggle, onDelete, onEdit, onUpdatePebble, onFocusMode, isFocused,
+  onInsufficientCredits, onCreditsChanged,
+}: SortablePebbleProps) => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(pebble.text);
   const [expanded, setExpanded] = useState(false);
@@ -67,24 +72,21 @@ const SortablePebble = ({ pebble, spark, boulderTitle, boulderPebbles, readOnly,
         .join('\n');
 
       const contextSection = contextPebbles
-        ? `\nContext from other completed tasks in this phase (use for consistency):\n${contextPebbles}\n`
+        ? `\nContext from other completed tasks in this phase:\n${contextPebbles}\n`
         : '';
 
-      const prompt = buildAnswerPrompt(spark, boulderTitle, pebble.text, contextSection);
-      const raw = await callAIWithCredit(prompt, 'ANSWER', { temperature: 0.5, maxTokens: 8192 });
+      const messages = buildAnswerMessages(spark, boulderTitle, pebble.text, contextSection);
+      const raw = await callAIWithCredit(messages, 'ANSWER', { temperature: 0.5, maxTokens: 8192 });
       const html = raw.replace(/```html|```/g, '').trim();
       onUpdatePebble({ content: html });
       toast.success('AI answer ready!');
-
-      // Show remaining credits
-      const remaining = await getUserCredits();
-      toast(`${remaining} credits remaining`, { duration: 2000 });
+      onCreditsChanged?.(); // ✅ refresh credit badge
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error';
       if (message.startsWith('INSUFFICIENT_CREDITS')) {
         const remaining = message.split(':')[1] || '0';
-        toast.error(`Not enough credits (${remaining} left). Top up to continue.`);
+        toast.error(`Not enough credits (${remaining} left).`);
         onInsufficientCredits?.();
       } else {
         toast.error(`Answer failed: ${message}`);

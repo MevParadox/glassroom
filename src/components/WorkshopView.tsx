@@ -14,9 +14,15 @@ interface WorkshopViewProps {
   onDeleteProject: (id: string) => void;
   onFreezeProject: (id: string) => void;
   searchQuery?: string;
+  onInsufficientCredits?: () => void;
+  onCreditsChanged?: () => void;
 }
 
-const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreateProject, onDeleteProject, onFreezeProject, searchQuery = '' }: WorkshopViewProps) => {
+const WorkshopView = ({
+  projects, onUpdateProject, onArchiveProject, onCreateProject,
+  onDeleteProject, onFreezeProject, searchQuery = '',
+  onInsufficientCredits, onCreditsChanged,
+}: WorkshopViewProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNewInput, setShowNewInput] = useState(false);
   const [newSpark, setNewSpark] = useState('');
@@ -53,6 +59,8 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
           onArchiveProject(selected.id);
           setSelectedId(null);
         }}
+        onInsufficientCredits={onInsufficientCredits}
+        onCreditsChanged={onCreditsChanged}
       />
     );
   }
@@ -63,34 +71,23 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
         <p className="text-sm text-muted-foreground font-body">
           {activeProjects.length} active project{activeProjects.length !== 1 ? 's' : ''}
         </p>
-        <button
-          onClick={() => setShowNewInput(true)}
-          title="Create a new project from an idea"
-          className="flex items-center gap-2 px-4 py-2 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-        >
+        <button onClick={() => setShowNewInput(true)} title="Create a new project"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-body bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity">
           <Plus size={14} /> New Project
         </button>
       </div>
 
       {showNewInput && (
-        <motion.form
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          onSubmit={(e) => { e.preventDefault(); handleCreate(); }}
-          className="flex gap-2"
-        >
-          <input
-            type="text"
-            value={newSpark}
-            onChange={(e) => setNewSpark(e.target.value)}
-            placeholder="What's the idea or project?"
-            autoFocus
-            className="flex-1 px-4 py-2.5 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
-          />
+        <motion.form initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          onSubmit={(e) => { e.preventDefault(); handleCreate(); }} className="flex gap-2">
+          <input type="text" value={newSpark} onChange={(e) => setNewSpark(e.target.value)}
+            placeholder="What's the idea or project?" autoFocus
+            className="flex-1 px-4 py-2.5 text-sm bg-card border border-border rounded-lg font-body placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30" />
           <button type="submit" className="px-4 py-2.5 text-sm font-body bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
             Create
           </button>
-          <button type="button" onClick={() => { setShowNewInput(false); setNewSpark(''); }} className="px-3 py-2.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => { setShowNewInput(false); setNewSpark(''); }}
+            className="px-3 py-2.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors">
             Cancel
           </button>
         </motion.form>
@@ -124,7 +121,7 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
                   />
                   <ConfirmDialog
                     trigger={
-                      <button onClick={(e) => e.stopPropagation()} title="Freeze to Cryochamber — save for later"
+                      <button onClick={(e) => e.stopPropagation()} title="Freeze to Cryochamber"
                         className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-blue-400 transition-colors">
                         <Snowflake size={14} />
                       </button>
@@ -137,7 +134,7 @@ const WorkshopView = ({ projects, onUpdateProject, onArchiveProject, onCreatePro
                   />
                   <ConfirmDialog
                     trigger={
-                      <button onClick={(e) => e.stopPropagation()} title="Move to Trash — can be restored later"
+                      <button onClick={(e) => e.stopPropagation()} title="Move to Trash"
                         className="p-1.5 rounded-md bg-card/80 backdrop-blur border border-border text-muted-foreground hover:text-destructive transition-colors">
                         <Trash2 size={14} />
                       </button>

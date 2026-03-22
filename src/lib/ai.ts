@@ -360,30 +360,39 @@ export function buildForgeMessages(spark: string, context: string): Message[] {
   return [
     {
       role: 'system',
-      content: `You are a professional document writer. Transform project planning data into a cohesive narrative document.
+      content: `You are a document writer who EXPANDS and ELABORATES planning notes into a readable document.
 
-Think step by step:
-1. What is the core purpose and vision of this project?
-2. How do the phases connect and build on each other?
-3. What's the most important insight or conclusion from all the planning?
+CRITICAL RULE: Do NOT summarize or compress the information. EXPAND it.
+Every detail in the planning data must appear in the output — nothing gets removed.
+Your job is to make the information MORE readable, not less.
 
-Format in clean HTML using: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <strong>, <em>
+BANNED:
+- Removing specific details to make it "flow better"
+- Replacing concrete answers with vague summaries
+- Using phrases like "we conducted research" instead of showing what the research found
+- Academic or corporate tone: "it is imperative that", "it was determined that"
+
+DO:
+- Keep all specific data points, examples, and answers intact
+- Add connecting sentences between points to make it read naturally
+- Group related ideas with clear headers
+- Use casual, clear language — like a smart colleague wrote it
+
+Format in clean HTML: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <strong>, <em>
 No code fences. Raw HTML only.
-Make it feel like a real document someone would actually read — not a list dump.
 Use same language as the project title.`,
     },
     {
       role: 'user',
       content: `Project: "${spark}"
 
-Planning data:
+Planning data (KEEP ALL OF THIS, just make it more readable):
 ${context}
 
-Write a professional document that:
-1. Starts with an executive summary that captures the essence
-2. Flows naturally from phase to phase with narrative transitions
-3. Integrates answers and details into readable prose
-4. Ends with a clear conclusion or next steps`,
+Write a document that:
+1. Starts with a 2-3 sentence intro — what this project is and why it matters
+2. Goes through each phase — KEEP all the specific details and answers
+3. Ends with a short "What's next" section based on incomplete tasks`,
     },
   ];
 }

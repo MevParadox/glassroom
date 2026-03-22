@@ -172,7 +172,15 @@ Examples: "Determine focus mode criteria", "Choose tech stack", "Decide monetiza
 → Strategy: Give ONE clear recommendation first. Then explain why in 2-3 reasons.
   Then explicitly label what to deprioritize and why.
   NEVER list all options as equal — that's not a decision, that's a menu.
-  Format: recommendation → why → what to skip for now
+  Format: recommendation → why → what to skip for now.
+  → Output format must be:
+  Line 1: Bold recommendation — the ONE thing to do first
+  Line 2-3: "Build first" and "Build second" 
+  Line 4-5: "Skip for v1" with reason why
+  Never more than 5 points total.
+  - ONLY list options that are directly relevant to what was asked.
+  Do NOT invent options just to fill the "skip" slots.
+  If there are only 2 real options → only list 2. Don't pad.
 
 [EXECUTION] → User needs step-by-step to do something.
 Examples: "Set up database", "Write the first chapter", "Build the landing page"

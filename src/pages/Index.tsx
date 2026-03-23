@@ -20,6 +20,8 @@ import { Inbox, Wrench, Trophy, Snowflake, Trash2, Search, X, Zap, LogOut, Hamme
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { supabase } from '@/lib/supabase';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
+import { Download } from 'lucide-react';
 
 type Tab = 'inbox' | 'workshop' | 'anvil' | 'archive' | 'cryo' | 'trash';
 
@@ -272,7 +274,8 @@ const Index = () => {
     credits < 10 ? 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950 dark:border-orange-800' :
     'text-primary bg-primary/10 border-primary/20';
 
- 
+  const { isInstallable, install } = usePWAInstall();
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -332,6 +335,13 @@ const Index = () => {
                       <Zap size={14} className="text-primary" />
                       Top Up Shards
                     </button>
+                    {isInstallable && (
+                      <button onClick={() => { install(); setShowDropdown(false); }}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left">
+                        <Download size={14} className="text-primary" />
+                        Install App
+                      </button>
+                    )}
                     <button onClick={() => { toggleDark(); setShowDropdown(false); }}
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-body text-foreground hover:bg-secondary/50 transition-colors text-left">
                       {isDark ? <Sun size={14} className="text-primary" /> : <Moon size={14} className="text-primary" />}
